@@ -36,11 +36,15 @@
         );
     }
 
-    function ensureUiInjected() {
+    function ensureUiInjected(attempt = 0) {
         if (document.getElementById('qd-download-wrap')) return;
 
         const container = findContainer();
-        if (!container) return;
+        if (!container) {
+            if (attempt < 20) setTimeout(() => ensureUiInjected(attempt + 1), 250);
+            else console.warn('[QuickDownload] Container not found after retries');
+            return;
+        }
 
         const wrap = document.createElement('div');
         wrap.id = 'qd-download-wrap';
@@ -314,6 +318,7 @@
         document.getElementById('qd-cancel-btn').addEventListener('click', cancelDownload);
     }
 
+    console.log('[QuickDownload] plugin loaded');
     window.addEventListener('hashchange', onHashChange);
 
     // Handle the case where the page loads directly on a detail route
