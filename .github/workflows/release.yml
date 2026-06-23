@@ -1,0 +1,69 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore src/JellyfinQuickDownload.csproj
+
+      - name: Publish
+        run: dotnet publish src/JellyfinQuickDownload.csproj -c Release -o publish/
+
+      - name: Package
+        id: package
+        shell: bash
+        run: |
+          VERSION="${{ github.ref_name }}"
+          VERSION="${VERSION#v}"
+          ZIP_NAME="jellyfin-quickdownload_${VERSION}.zip"
+          cd publish
+          zip -r "../${ZIP_NAME}" Jellyfin.Plugin.QuickDownload.dll web/
+          cd ..
+          CHECKSUM=$(md5sum "${ZIP_NAME}" | awk '{ print $1 }')
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "zip_name=${ZIP_NAME}" >> "$GITHUB_OUTPUT"
+          echo "checksum=${CHECKSUM}" >> "$GITHUB_OUTPUT"
+
+      - name: Update manifest
+        shell: bash
+        run: |
+          VERSION="${{ steps.package.outputs.version }}"
+          ZIP_NAME="${{ steps.package.outputs.zip_name }}"
+          CHECKSUM="${{ steps.package.outputs.checksum }}"
+          SOURCE_URL="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/${ZIP_NAME}"
+          sed -i "s|PLACEHOLDER_MD5|${CHECKSUM}|g" repo/manifest.json
+          sed -i "s|https://github.com/[^/]*/[^/]*/releases/download/[^/]*/jellyfin-quickdownload_[^\"]*\.zip|${SOURCE_URL}|g" repo/manifest.json
+
+      - name: Commit manifest
+        shell: bash
+        run: |
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git add repo/manifest.json
+          git commit -m "release: update manifest for ${{ github.ref_name }}"
+          git push origin HEAD:main
+
+      - name: Create release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            "${{ steps.package.outputs.zip_name }}" \
+            --title "QuickDownload ${{ steps.package.outputs.version }}" \
+            --generate-notes

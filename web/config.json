@@ -1,0 +1,9 @@
+{
+  "guid": "a4b5c6d7-e8f9-0a1b-2c3d-4e5f6a7b8c9d",
+  "pluginVersion": "1.0.0",
+  "pluginName": "QuickDownload",
+  "clientScript": {
+    "url": "plugin.js",
+    "type": "module"
+  }
+}

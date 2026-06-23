@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>Jellyfin.Plugin.QuickDownload</AssemblyName>
+    <RootNamespace>Jellyfin.Plugin.QuickDownload</RootNamespace>
+    <Version>1.0.0</Version>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Jellyfin SDK references — not bundled into the output (provided at runtime by Jellyfin itself) -->
+    <PackageReference Include="Jellyfin.Model" Version="10.9.0" PrivateAssets="All" />
+    <PackageReference Include="Jellyfin.Common" Version="10.9.0" PrivateAssets="All" />
+  </ItemGroup>
+
+  <!-- Copy the web/ assets into the build output alongside the DLL -->
+  <ItemGroup>
+    <None Include="..\web\**\*" CopyToOutputDirectory="PreserveNewest">
+      <Link>web\%(RecursiveDir)%(Filename)%(Extension)</Link>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="..\web\config.json">
+      <LogicalName>Jellyfin.Plugin.QuickDownload.web.config.json</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+</Project>
