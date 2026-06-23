@@ -4,7 +4,7 @@
     <TargetFramework>net8.0</TargetFramework>
     <AssemblyName>Jellyfin.Plugin.QuickDownload</AssemblyName>
     <RootNamespace>Jellyfin.Plugin.QuickDownload</RootNamespace>
-    <Version>1.0.1</Version>
+    <Version>1.0.2</Version>
     <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>

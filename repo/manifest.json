@@ -8,8 +8,16 @@
     "owner": "philip",
     "versions": [
       {
-        "version": "1.0.1.0",
+        "version": "1.0.2.0",
         "changelog": "Fix plugin script never loading — inject plugin.js into index.html at server startup via IHostedService.",
+        "targetAbi": "10.9.0.0",
+        "sourceUrl": "https://github.com/ph15ch/Jellyfin-Transcode-Downloader/releases/download/v1.0.2/jellyfin-quickdownload_1.0.2.zip",
+        "checksum": "PLACEHOLDER_MD5",
+        "timestamp": "2026-06-24T00:00:00Z"
+      },
+      {
+        "version": "1.0.1.0",
+        "changelog": "Fix button not appearing — add retry loop waiting for React to render the detail page container.",
         "targetAbi": "10.9.0.0",
         "sourceUrl": "https://github.com/ph15ch/Jellyfin-Transcode-Downloader/releases/download/v1.0.1/jellyfin-quickdownload_1.0.1.zip",
         "checksum": "79f8325fb82fd9d37c5fdbc5c624623c",
@@ -19,7 +27,7 @@
         "version": "1.0.0.0",
         "changelog": "Initial release — quality dropdown, transcode download, original download, progress bar.",
         "targetAbi": "10.9.0.0",
-        "sourceUrl": "https://github.com/ph15ch/Jellyfin-Transcode-Downloader/releases/download/v1.0.1/jellyfin-quickdownload_1.0.1.zip",
+        "sourceUrl": "https://github.com/ph15ch/Jellyfin-Transcode-Downloader/releases/download/v1.0.0/jellyfin-quickdownload_1.0.0.zip",
         "checksum": "c7de5af70a9c79b1b68fe7df32d09310",
         "timestamp": "2026-06-23T00:00:00Z"
       }
