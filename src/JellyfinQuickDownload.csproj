@@ -27,6 +27,9 @@
     <EmbeddedResource Include="..\web\config.json">
       <LogicalName>Jellyfin.Plugin.QuickDownload.web.config.json</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="..\web\plugin.js">
+      <LogicalName>Jellyfin.Plugin.QuickDownload.web.plugin.js</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 
 </Project>
