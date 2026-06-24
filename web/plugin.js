@@ -31,7 +31,7 @@
     function findContainer() {
         return (
             document.querySelector('.mainDetailButtons') ||
-            document.querySelector('[class*="mainDetail"]') ||
+            document.querySelector('.detailButtons') ||
             document.querySelector('[class*="detailButton"]')
         );
     }
@@ -120,7 +120,7 @@
             try {
                 const token = client.accessToken();
                 const userId = client.getCurrentUserId();
-                const baseUrl = client._serverAddress || window.location.origin;
+                const baseUrl = client.serverAddress() || window.location.origin;
                 const url = `${baseUrl}/Users/${userId}/Items/${itemId}?api_key=${token}`;
 
                 const response = await fetch(url);
@@ -162,7 +162,7 @@
         getApiClient(0, 5, (client) => {
             const token = client.accessToken();
             const itemId = currentItemId;
-            const baseUrl = client._serverAddress || window.location.origin;
+            const baseUrl = client.serverAddress() || window.location.origin;
 
             if (selectedBitrate === 0) {
                 startOriginalDownload(baseUrl, itemId, token);
@@ -174,7 +174,7 @@
 
     function startOriginalDownload(baseUrl, itemId, token) {
         const url = `${baseUrl}/Items/${itemId}/Download?api_key=${token}`;
-        showStatusBar('Downloading original…', null, null);
+        showStatusBar('Downloading original…');
         setStatusText('Browser download manager will handle this.');
         const a = document.createElement('a');
         a.href = url;
@@ -199,16 +199,16 @@
         }
 
         const durationSeconds = item.RunTimeTicks / 10_000_000;
-        const estimatedBytes = (selectedBitrate * durationSeconds) / 8;
+        const estimatedBytes = ((selectedBitrate + 128_000) * durationSeconds) / 8;
 
         isDownloading = true;
         currentAbortController = new AbortController();
-        showStatusBar(filename, 0, estimatedBytes);
+        showStatusBar(filename);
 
         fetch(url, { signal: currentAbortController.signal })
             .then(response => {
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                return readStream(response.body, estimatedBytes, filename);
+                return readStream(response.body, estimatedBytes);
             })
             .then(blob => {
                 triggerBlobDownload(blob, filename);
@@ -230,7 +230,7 @@
             });
     }
 
-    async function readStream(body, estimatedBytes, filename) {
+    async function readStream(body, estimatedBytes) {
         const reader = body.getReader();
         const chunks = [];
         let received = 0;
@@ -270,7 +270,7 @@
         URL.revokeObjectURL(url);
     }
 
-    function showStatusBar(filename, receivedBytes, estimatedBytes) {
+    function showStatusBar(filename) {
         const bar = document.getElementById('qd-status-bar');
         if (!bar) return;
         document.getElementById('qd-status-filename').textContent = filename;
