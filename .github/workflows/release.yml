@@ -64,6 +64,12 @@ jobs:
         run: |
           set -euo pipefail
 
+          # actions/checkout dereferences annotated tags to commits and does not
+          # fetch the tag object itself, so `git cat-file -t <tag>` reports
+          # `commit` even for a genuinely annotated tag. Force-refetch the tag
+          # ref to restore the annotated tag object before the guard reads it.
+          git fetch --force origin "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
+
           VERSION="${GITHUB_REF_NAME#v}"
           echo "Releasing version: ${VERSION}"
 
