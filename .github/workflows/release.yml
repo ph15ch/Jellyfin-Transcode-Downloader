@@ -1,5 +1,14 @@
 name: Release
 
+# Fully tag-driven release pipeline.
+# The annotated git tag `vX.Y.Z` is the single source of truth:
+#   - VERSION is derived from the tag name (strip leading `v`).
+#   - The annotated tag MESSAGE is the changelog.
+#   - `dotnet publish -p:Version=$VERSION` drives the assembly version (and
+#     therefore the JS cache-bust derived from it via reflection in Plugin.cs).
+# Nothing is hand-edited; a tag push produces a GitHub release + a manifest
+# entry committed back to `main`.
+
 on:
   push:
     tags:
@@ -8,62 +17,220 @@ on:
 permissions:
   contents: write
 
+# Serialize overlapping release runs so two concurrent tag pushes don't race
+# on the manifest commit to `main`. We do NOT cancel in progress: every tag
+# deserves to finish producing its release.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
   release:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      # Full history + tags so we can read the annotated tag message, and a
+      # writable token so we can later push the manifest commit to `main`.
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # Persisted credentials are needed for the later push to main.
+          persist-credentials: true
 
-      - uses: actions/setup-dotnet@v4
+      # SDK 8.0.x matches the csproj <TargetFramework>net8.0</TargetFramework>.
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
 
-      - name: Restore
-        run: dotnet restore src/JellyfinQuickDownload.csproj
+      # ----------------------------------------------------------------------
+      # Ordering rationale:
+      #   1. While still on the TAG checkout (detached HEAD), derive VERSION,
+      #      read+validate the changelog from the annotated tag, build, zip,
+      #      and compute the md5. The build MUST happen from the tagged tree.
+      #   2. Save the changelog + checksum into env/files.
+      #   3. THEN switch to `main`, regenerate the manifest prepend against
+      #      main's CURRENT contents (so a concurrent manifest commit isn't
+      #      clobbered), validate, commit, push --rebase.
+      #   4. Finally create the GitHub release with the asset.
+      # We never edit the manifest on the detached tag checkout — the only
+      # manifest mutation happens on `main` in step (3).
+      # ----------------------------------------------------------------------
 
-      - name: Publish
-        run: dotnet publish src/JellyfinQuickDownload.csproj -c Release -o publish/
+      - name: Derive version and read changelog from tag
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
 
-      - name: Package
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "Releasing version: ${VERSION}"
+
+          # GUARD: require an ANNOTATED tag. Annotated tags are `tag` objects;
+          # lightweight tags resolve directly to `commit`. For a lightweight
+          # tag, `%(contents)` would silently return the tagged commit's
+          # message and ship the commit subject as a bogus changelog.
+          TAG_TYPE="$(git cat-file -t "${GITHUB_REF_NAME}")"
+          if [ "${TAG_TYPE}" != "tag" ]; then
+            echo "::error::Tag '${GITHUB_REF_NAME}' is not an annotated tag (object type: ${TAG_TYPE}). The changelog must come from an annotated tag message; aborting." >&2
+            exit 1
+          fi
+
+          # Read the annotated tag body (the human-written changelog).
+          CHANGELOG="$(git tag -l --format='%(contents)' "${GITHUB_REF_NAME}")"
+
+          # Strip a trailing PGP signature block if the tag is signed.
+          # Everything from the BEGIN PGP SIGNATURE marker onward is removed.
+          CHANGELOG="$(printf '%s\n' "${CHANGELOG}" \
+            | sed '/-----BEGIN PGP SIGNATURE-----/,$d')"
+
+          # Trim leading/trailing blank lines.
+          CHANGELOG="$(printf '%s' "${CHANGELOG}" \
+            | sed -e ':a' -e '/^[[:space:]]*$/{$d;N;ba}' \
+            | sed -e '/./,$!d')"
+
+          # GUARD: an empty tag message means no changelog — fail loudly.
+          if [ -z "${CHANGELOG//[[:space:]]/}" ]; then
+            echo "::error::Annotated tag '${GITHUB_REF_NAME}' has an EMPTY message. The tag message IS the changelog; aborting." >&2
+            exit 1
+          fi
+
+          echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
+
+          # Multi-line output via heredoc-style delimiter. Use a RANDOM
+          # delimiter so a changelog line can never collide with (or inject
+          # via) the sentinel.
+          DELIM="EOF_$(openssl rand -hex 16)"
+          {
+            echo "changelog<<${DELIM}"
+            printf '%s\n' "${CHANGELOG}"
+            echo "${DELIM}"
+          } >> "${GITHUB_OUTPUT}"
+
+          echo "----- changelog -----"
+          printf '%s\n' "${CHANGELOG}"
+          echo "---------------------"
+
+      - name: Build (publish from tag)
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.meta.outputs.version }}"
+          # The ONE knob: -p:Version drives the 4-part assembly version
+          # (${VERSION}.0) and the reflection-derived JS cache-bust.
+          dotnet publish src/JellyfinQuickDownload.csproj \
+            -c Release \
+            -o publish/ \
+            -p:Version="${VERSION}"
+
+      - name: Package and checksum
         id: package
         shell: bash
         run: |
-          VERSION="${{ github.ref_name }}"
-          VERSION="${VERSION#v}"
+          set -euo pipefail
+          VERSION="${{ steps.meta.outputs.version }}"
           ZIP_NAME="jellyfin-quickdownload_${VERSION}.zip"
+
+          # The DLL is the only required asset: plugin.js/config.json are
+          # embedded as resources. We ALSO include the web/ folder if present
+          # as a low-risk safety net (harmless duplication; helps debugging /
+          # any future non-embedded loading path).
           cd publish
-          zip -r "../${ZIP_NAME}" Jellyfin.Plugin.QuickDownload.dll web/
+          if [ -d web ]; then
+            zip -r "../${ZIP_NAME}" Jellyfin.Plugin.QuickDownload.dll web/
+          else
+            zip -r "../${ZIP_NAME}" Jellyfin.Plugin.QuickDownload.dll
+          fi
           cd ..
-          CHECKSUM=$(md5sum "${ZIP_NAME}" | awk '{ print $1 }')
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "zip_name=${ZIP_NAME}" >> "$GITHUB_OUTPUT"
-          echo "checksum=${CHECKSUM}" >> "$GITHUB_OUTPUT"
 
-      - name: Update manifest
+          CHECKSUM="$(md5sum "${ZIP_NAME}" | awk '{ print $1 }')"
+          echo "Zip: ${ZIP_NAME}  md5: ${CHECKSUM}"
+
+          echo "zip_name=${ZIP_NAME}" >> "${GITHUB_OUTPUT}"
+          echo "checksum=${CHECKSUM}" >> "${GITHUB_OUTPUT}"
+
+      - name: Update manifest on main, commit and push
         shell: bash
-        run: |
-          VERSION="${{ steps.package.outputs.version }}"
-          ZIP_NAME="${{ steps.package.outputs.zip_name }}"
-          CHECKSUM="${{ steps.package.outputs.checksum }}"
-          SOURCE_URL="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/${ZIP_NAME}"
-          sed -i "s|PLACEHOLDER_MD5|${CHECKSUM}|g" repo/manifest.json
-          sed -i "s|https://github.com/[^/]*/[^/]*/releases/download/[^/]*/jellyfin-quickdownload_[^\"]*\.zip|${SOURCE_URL}|g" repo/manifest.json
-
-      - name: Commit manifest
-        shell: bash
-        run: |
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git config user.name "github-actions[bot]"
-          git add repo/manifest.json
-          git commit -m "release: update manifest for ${{ github.ref_name }}"
-          git push origin HEAD:main
-
-      - name: Create release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.meta.outputs.version }}
+          ZIP_NAME: ${{ steps.package.outputs.zip_name }}
+          CHECKSUM: ${{ steps.package.outputs.checksum }}
+          CHANGELOG: ${{ steps.meta.outputs.changelog }}
         run: |
-          gh release create "${{ github.ref_name }}" \
+          set -euo pipefail
+
+          FULL_VERSION="${VERSION}.0"
+          SOURCE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/${ZIP_NAME}"
+          TIMESTAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+          # Switch from the detached tag checkout to main. We commit the
+          # manifest to main (the branch users consume via raw.githubusercontent),
+          # NOT to the tag. Build artifacts (zip) already exist on disk and are
+          # untouched by the branch switch.
+          git fetch origin main
+          git checkout -B main origin/main
+
+          # GUARD: versions are immutable. If this 4-part version already
+          # exists in the manifest, hard-fail — a re-release needs a new tag.
+          if jq -e --arg v "${FULL_VERSION}" \
+              '.[0].versions[]?.version == $v | select(.)' \
+              repo/manifest.json | grep -q true; then
+            echo "::error::Version '${FULL_VERSION}' already exists in repo/manifest.json. Versions are immutable; cut a new tag." >&2
+            exit 1
+          fi
+
+          # PREPEND the new version object. Old entries stay byte-for-byte
+          # untouched; jq only rebuilds the top-level array order here.
+          jq \
+            --arg version   "${FULL_VERSION}" \
+            --arg changelog "${CHANGELOG}" \
+            --arg targetAbi "10.9.0.0" \
+            --arg sourceUrl "${SOURCE_URL}" \
+            --arg checksum  "${CHECKSUM}" \
+            --arg timestamp "${TIMESTAMP}" \
+            '.[0].versions = ([{
+                version:   $version,
+                changelog: $changelog,
+                targetAbi: $targetAbi,
+                sourceUrl: $sourceUrl,
+                checksum:  $checksum,
+                timestamp: $timestamp
+              }] + .[0].versions)' \
+            repo/manifest.json > repo/manifest.json.tmp
+
+          # GUARD: result must be valid JSON AND contain the new entry,
+          # else fail BEFORE committing — never commit corruption.
+          if ! jq -e --arg v "${FULL_VERSION}" \
+              'type == "array"
+               and (.[0].versions | type == "array")
+               and (any(.[0].versions[]; .version == $v))' \
+              repo/manifest.json.tmp > /dev/null; then
+            echo "::error::Generated manifest is invalid or missing version '${FULL_VERSION}'. Aborting before commit." >&2
+            rm -f repo/manifest.json.tmp
+            exit 1
+          fi
+
+          mv repo/manifest.json.tmp repo/manifest.json
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add repo/manifest.json
+          git commit -m "release: add manifest entry for ${GITHUB_REF_NAME}"
+
+          # Rebase onto any concurrent manifest commit before pushing so we
+          # don't clobber another release run that landed first.
+          git pull --rebase origin main
+          git push origin main
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create "${GITHUB_REF_NAME}" \
             "${{ steps.package.outputs.zip_name }}" \
-            --title "QuickDownload ${{ steps.package.outputs.version }}" \
+            --title "QuickDownload ${{ steps.meta.outputs.version }}" \
             --generate-notes

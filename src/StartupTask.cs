@@ -11,8 +11,8 @@ namespace Jellyfin.Plugin.QuickDownload
     public class StartupTask : IHostedService
     {
         private const string Marker = "<!-- QuickDownload -->";
-        private const string ScriptTag =
-            "<script src=\"/web/quickdownload/plugin.js\" defer></script>";
+        private static readonly string ScriptTag =
+            $"<script src=\"/web/quickdownload/plugin.js?v={typeof(StartupTask).Assembly.GetName().Version}\" defer></script>";
 
         private readonly IApplicationPaths _appPaths;
         private readonly ILogger<StartupTask> _logger;
