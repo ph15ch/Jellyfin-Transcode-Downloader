@@ -8,6 +8,14 @@
     "owner": "philip",
     "versions": [
       {
+        "version": "1.0.10.0",
+        "changelog": "fix: populate dropdown after UI injection to eliminate race condition\n\nThe metadata fetch often completed before Jellyfin rendered the detail\ncontainer, so populateDropdown() exited early (select === null) without\never setting currentItem. Clicking Download then silently did nothing.\n\n- Move currentItem assignment before the early return in populateDropdown()\n- Re-call populateDropdown() after injecting the UI if data already arrived\n- Reset currentItem when navigating to a new item to avoid stale options",
+        "targetAbi": "10.11.8.0",
+        "sourceUrl": "https://github.com/ph15ch/Jellyfin-Transcode-Downloader/releases/download/v1.0.10/jellyfin-quickdownload_1.0.10.zip",
+        "checksum": "01796057b572dc32b6a35158af348c82",
+        "timestamp": "2026-06-25T12:16:14Z"
+      },
+      {
         "version": "1.0.9.0",
         "changelog": "fix: strip Accept-Encoding/Content-Encoding to prevent compressed-body corruption\n\nJellyfin's static file middleware serves index.html pre-compressed when the\nclient advertises Accept-Encoding. The IStartupFilter middleware was buffering\nthose compressed bytes and writing them back with Content-Encoding: gzip still\nset, causing browsers to report 'cannot decode raw data'.\n\nFix: remove Accept-Encoding from the request before intercepting so upstream\nnever activates compression; also strip Content-Encoding from the response.",
         "targetAbi": "10.11.8.0",
