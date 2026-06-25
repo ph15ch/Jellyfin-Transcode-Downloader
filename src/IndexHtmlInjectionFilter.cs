@@ -5,7 +5,6 @@ using MediaBrowser.Common.Configuration;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.Logging;
 
 namespace Jellyfin.Plugin.QuickDownload
@@ -46,13 +45,12 @@ namespace Jellyfin.Plugin.QuickDownload
                 return;
             }
 
+            // Strip Accept-Encoding so neither dynamic compression nor pre-compressed
+            // static files (.gz/.br variants) are served — we need plain-text bytes
+            // in our buffer.  index.html is small; the overhead is negligible.
+            context.Request.Headers.Remove("Accept-Encoding");
+
             var originalBody = context.Response.Body;
-
-            // Disable zero-copy SendFile so the static file middleware writes through
-            // Response.Body (our buffer) rather than bypassing it via the kernel path.
-            var sendFile = context.Features.Get<IHttpSendFileFeature>();
-            context.Features.Set<IHttpSendFileFeature>(null);
-
             await using var buffer = new MemoryStream();
             context.Response.Body = buffer;
 
@@ -63,14 +61,12 @@ namespace Jellyfin.Plugin.QuickDownload
             catch
             {
                 context.Response.Body = originalBody;
-                context.Features.Set(sendFile);
                 buffer.Position = 0;
                 await buffer.CopyToAsync(originalBody);
                 throw;
             }
 
             context.Response.Body = originalBody;
-            context.Features.Set(sendFile);
             buffer.Position = 0;
 
             if (context.Response.StatusCode == 200
@@ -96,8 +92,10 @@ namespace Jellyfin.Plugin.QuickDownload
                     }
                 }
 
-                // Clear length headers — body size changed after injection.
+                // Clear length/encoding/cache headers — body is now plain text and a
+                // different size than what any upstream layer may have advertised.
                 context.Response.Headers.Remove("Content-Length");
+                context.Response.Headers.Remove("Content-Encoding");
                 context.Response.Headers.Remove("ETag");
                 context.Response.ContentLength = null;
 
