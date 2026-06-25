@@ -63,13 +63,16 @@
         wrap.appendChild(select);
         wrap.appendChild(btn);
         container.appendChild(wrap);
+
+        // If metadata already arrived before the UI was ready, populate now
+        if (currentItem) populateDropdown(currentItem);
     }
 
     function populateDropdown(item) {
+        currentItem = item;
+
         const select = document.getElementById('qd-quality-select');
         if (!select) return;
-
-        currentItem = item;
 
         select.innerHTML = '';
 
@@ -145,6 +148,7 @@
         const itemId = extractItemId(hash);
         if (!itemId) return;
 
+        if (currentItemId !== itemId) currentItem = null;
         currentItemId = itemId;
         ensureUiInjected();
         fetchItemMetadata(itemId);
