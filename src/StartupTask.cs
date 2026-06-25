@@ -1,5 +1,4 @@
 using System;
-using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Common.Configuration;
@@ -8,79 +7,64 @@ using Microsoft.Extensions.Logging;
 
 namespace Jellyfin.Plugin.QuickDownload
 {
+    /// <summary>
+    /// On startup, injects the QuickDownload client-script tag into the Jellyfin web
+    /// client. The script itself is served by <see cref="QuickDownloadController"/>;
+    /// this task only ensures the &lt;script&gt; tag reaches index.html (via the File
+    /// Transformation plugin, or an on-disk fallback). No plugin.js is copied to disk.
+    /// </summary>
     public class StartupTask : IHostedService
     {
-        private const string Marker = "<!-- QuickDownload -->";
-        private static readonly string ScriptTag =
-            $"<script src=\"/web/quickdownload/plugin.js?v={typeof(StartupTask).Assembly.GetName().Version}\" defer></script>";
-
-        private readonly IApplicationPaths _appPaths;
+        private readonly IConfigurationManager _configManager;
         private readonly ILogger<StartupTask> _logger;
 
-        public StartupTask(IApplicationPaths appPaths, ILogger<StartupTask> logger)
+        public StartupTask(IConfigurationManager configManager, ILogger<StartupTask> logger)
         {
-            _appPaths = appPaths;
+            _configManager = configManager;
             _logger = logger;
         }
 
         public Task StartAsync(CancellationToken cancellationToken)
         {
-            InjectWebAssets();
+            try
+            {
+                var appPaths = _configManager.CommonApplicationPaths;
+                var webPath = appPaths.WebPath;
+                var basePath = ResolveBasePath();
+
+                WebAssetInjector.Inject(webPath, basePath, _logger);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[QuickDownload] Failed to inject web assets");
+            }
+
             return Task.CompletedTask;
         }
 
         public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
-        private void InjectWebAssets()
+        /// <summary>
+        /// Reads the configured network base path (e.g. "/jellyfin") so the injected
+        /// script src resolves when Jellyfin runs under a sub-path. Read via the generic
+        /// configuration store to avoid a compile-time dependency on Jellyfin.Networking.
+        /// Returns an empty string when no base path is configured.
+        /// </summary>
+        private string ResolveBasePath()
         {
             try
             {
-                var webPath = _appPaths.WebPath;
+                var networkConfig = _configManager.GetConfiguration("network");
+                var baseUrl = networkConfig?.GetType()
+                    .GetProperty("BaseUrl")?
+                    .GetValue(networkConfig) as string;
 
-                var dir = Path.Combine(webPath, "quickdownload");
-                Directory.CreateDirectory(dir);
-                var destFile = Path.Combine(dir, "plugin.js");
-
-                const string resourceName = "Jellyfin.Plugin.QuickDownload.web.plugin.js";
-                using var src = typeof(StartupTask).Assembly.GetManifestResourceStream(resourceName)
-                    ?? throw new InvalidOperationException($"Missing embedded resource: {resourceName}");
-                using var dst = new FileStream(destFile, FileMode.Create, FileAccess.Write);
-                src.CopyTo(dst);
-
-                _logger.LogInformation("[QuickDownload] Wrote plugin.js to {Path}", destFile);
-
-                var indexPath = Path.Combine(webPath, "index.html");
-                if (!File.Exists(indexPath))
-                {
-                    _logger.LogWarning("[QuickDownload] index.html not found in {WebPath}", webPath);
-                    return;
-                }
-
-                var html = File.ReadAllText(indexPath);
-
-                if (html.Contains(Marker, StringComparison.Ordinal))
-                {
-                    _logger.LogInformation("[QuickDownload] Already injected into index.html");
-                    return;
-                }
-
-                if (!html.Contains("</body>", StringComparison.OrdinalIgnoreCase))
-                {
-                    _logger.LogWarning("[QuickDownload] No </body> in index.html — cannot inject script");
-                    return;
-                }
-
-                var patched = html.Replace(
-                    "</body>",
-                    $"\n    {Marker}\n    {ScriptTag}\n</body>",
-                    StringComparison.OrdinalIgnoreCase);
-
-                File.WriteAllText(indexPath, patched);
-                _logger.LogInformation("[QuickDownload] Script tag injected into index.html");
+                return baseUrl ?? string.Empty;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[QuickDownload] Failed to inject web assets");
+                _logger.LogWarning(ex, "[QuickDownload] Could not read network base path; assuming none.");
+                return string.Empty;
             }
         }
     }

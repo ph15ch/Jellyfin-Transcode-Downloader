@@ -5,7 +5,8 @@ name: Release
 #   - VERSION is derived from the tag name (strip leading `v`).
 #   - The annotated tag MESSAGE is the changelog.
 #   - `dotnet publish -p:Version=$VERSION` drives the assembly version (and
-#     therefore the JS cache-bust derived from it via reflection in Plugin.cs).
+#     therefore the JS cache-bust derived from it via reflection in
+#     WebAssetInjector.BuildScriptTag()).
 # Nothing is hand-edited; a tag push produces a GitHub release + a manifest
 # entry committed back to `main`.
 
@@ -38,11 +39,12 @@ jobs:
           # Persisted credentials are needed for the later push to main.
           persist-credentials: true
 
-      # SDK 8.0.x matches the csproj <TargetFramework>net8.0</TargetFramework>.
+      # SDK 9.0.x matches the csproj <TargetFramework>net9.0</TargetFramework>
+      # (Jellyfin 10.11.x is built on .NET 9).
       - name: Set up .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: '9.0.x'
 
       # ----------------------------------------------------------------------
       # Ordering rationale:
@@ -138,16 +140,11 @@ jobs:
           VERSION="${{ steps.meta.outputs.version }}"
           ZIP_NAME="jellyfin-quickdownload_${VERSION}.zip"
 
-          # The DLL is the only required asset: plugin.js/config.json are
-          # embedded as resources. We ALSO include the web/ folder if present
-          # as a low-risk safety net (harmless duplication; helps debugging /
-          # any future non-embedded loading path).
+          # The DLL is the only asset: plugin.js is embedded as a resource and
+          # served by QuickDownloadController. Nothing loads from disk, so the
+          # zip is just the DLL.
           cd publish
-          if [ -d web ]; then
-            zip -r "../${ZIP_NAME}" Jellyfin.Plugin.QuickDownload.dll web/
-          else
-            zip -r "../${ZIP_NAME}" Jellyfin.Plugin.QuickDownload.dll
-          fi
+          zip -r "../${ZIP_NAME}" Jellyfin.Plugin.QuickDownload.dll
           cd ..
 
           CHECKSUM="$(md5sum "${ZIP_NAME}" | awk '{ print $1 }')"
@@ -191,7 +188,7 @@ jobs:
           jq \
             --arg version   "${FULL_VERSION}" \
             --arg changelog "${CHANGELOG}" \
-            --arg targetAbi "10.9.0.0" \
+            --arg targetAbi "10.11.8.0" \
             --arg sourceUrl "${SOURCE_URL}" \
             --arg checksum  "${CHECKSUM}" \
             --arg timestamp "${TIMESTAMP}" \
