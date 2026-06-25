@@ -1,7 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <!-- Jellyfin 10.11.x is built on .NET 9; its SDK packages target net9.0. -->
+    <TargetFramework>net9.0</TargetFramework>
     <AssemblyName>Jellyfin.Plugin.QuickDownload</AssemblyName>
     <RootNamespace>Jellyfin.Plugin.QuickDownload</RootNamespace>
     <Version>0.0.0</Version>
@@ -10,20 +11,25 @@
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
 
+  <!-- ASP.NET Core types (ControllerBase, [ApiController], etc.) for the controller. -->
   <ItemGroup>
-    <!-- Jellyfin SDK references — not bundled into the output (provided at runtime by Jellyfin itself) -->
-    <PackageReference Include="Jellyfin.Model" Version="10.9.0" PrivateAssets="All" />
-    <PackageReference Include="Jellyfin.Common" Version="10.9.0" PrivateAssets="All" />
-    <PackageReference Include="Jellyfin.Controller" Version="10.9.0" PrivateAssets="All" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
-  <!-- Copy the web/ assets into the build output alongside the DLL -->
   <ItemGroup>
-    <None Include="..\web\**\*" CopyToOutputDirectory="PreserveNewest">
-      <Link>web\%(RecursiveDir)%(Filename)%(Extension)</Link>
-    </None>
+    <!-- Jellyfin SDK references — not bundled into the output (provided at runtime by Jellyfin itself).
+         Aligned to 10.11.8, the targeted ABI floor. -->
+    <PackageReference Include="Jellyfin.Model" Version="10.11.8" PrivateAssets="All" />
+    <PackageReference Include="Jellyfin.Common" Version="10.11.8" PrivateAssets="All" />
+    <PackageReference Include="Jellyfin.Controller" Version="10.11.8" PrivateAssets="All" />
+    <!-- Newtonsoft JObject is the parameter type of the File Transformation plugin's
+         RegisterTransformation(JObject) entry point. Jellyfin ships Newtonsoft at
+         runtime, so this is reference-only (PrivateAssets=All). -->
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.1" PrivateAssets="All" />
   </ItemGroup>
 
+  <!-- The client script is embedded and served by QuickDownloadController; it is
+       never written to disk, so nothing is copied to the build output's web/ folder. -->
   <ItemGroup>
     <EmbeddedResource Include="..\web\plugin.js">
       <LogicalName>Jellyfin.Plugin.QuickDownload.web.plugin.js</LogicalName>
