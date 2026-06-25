@@ -5,7 +5,6 @@ using MediaBrowser.Common.Configuration;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.Logging;
 
 namespace Jellyfin.Plugin.QuickDownload
@@ -47,12 +46,6 @@ namespace Jellyfin.Plugin.QuickDownload
             }
 
             var originalBody = context.Response.Body;
-
-            // Disable zero-copy SendFile so the static file middleware writes through
-            // Response.Body (our buffer) rather than bypassing it via the kernel path.
-            var sendFile = context.Features.Get<IHttpSendFileFeature>();
-            context.Features.Set<IHttpSendFileFeature>(null);
-
             await using var buffer = new MemoryStream();
             context.Response.Body = buffer;
 
@@ -63,14 +56,12 @@ namespace Jellyfin.Plugin.QuickDownload
             catch
             {
                 context.Response.Body = originalBody;
-                context.Features.Set(sendFile);
                 buffer.Position = 0;
                 await buffer.CopyToAsync(originalBody);
                 throw;
             }
 
             context.Response.Body = originalBody;
-            context.Features.Set(sendFile);
             buffer.Position = 0;
 
             if (context.Response.StatusCode == 200
@@ -96,7 +87,7 @@ namespace Jellyfin.Plugin.QuickDownload
                     }
                 }
 
-                // Clear length headers — body size changed after injection.
+                // Clear length/cache headers — body size changed after injection.
                 context.Response.Headers.Remove("Content-Length");
                 context.Response.Headers.Remove("ETag");
                 context.Response.ContentLength = null;
