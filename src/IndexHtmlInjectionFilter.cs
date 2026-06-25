@@ -45,6 +45,11 @@ namespace Jellyfin.Plugin.QuickDownload
                 return;
             }
 
+            // Strip Accept-Encoding so neither dynamic compression nor pre-compressed
+            // static files (.gz/.br variants) are served — we need plain-text bytes
+            // in our buffer.  index.html is small; the overhead is negligible.
+            context.Request.Headers.Remove("Accept-Encoding");
+
             var originalBody = context.Response.Body;
             await using var buffer = new MemoryStream();
             context.Response.Body = buffer;
@@ -87,8 +92,10 @@ namespace Jellyfin.Plugin.QuickDownload
                     }
                 }
 
-                // Clear length/cache headers — body size changed after injection.
+                // Clear length/encoding/cache headers — body is now plain text and a
+                // different size than what any upstream layer may have advertised.
                 context.Response.Headers.Remove("Content-Length");
+                context.Response.Headers.Remove("Content-Encoding");
                 context.Response.Headers.Remove("ETag");
                 context.Response.ContentLength = null;
 
