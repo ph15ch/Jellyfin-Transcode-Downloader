@@ -8,6 +8,14 @@
     "owner": "philip",
     "versions": [
       {
+        "version": "1.0.9.0",
+        "changelog": "fix: strip Accept-Encoding/Content-Encoding to prevent compressed-body corruption\n\nJellyfin's static file middleware serves index.html pre-compressed when the\nclient advertises Accept-Encoding. The IStartupFilter middleware was buffering\nthose compressed bytes and writing them back with Content-Encoding: gzip still\nset, causing browsers to report 'cannot decode raw data'.\n\nFix: remove Accept-Encoding from the request before intercepting so upstream\nnever activates compression; also strip Content-Encoding from the response.",
+        "targetAbi": "10.11.8.0",
+        "sourceUrl": "https://github.com/ph15ch/Jellyfin-Transcode-Downloader/releases/download/v1.0.9/jellyfin-quickdownload_1.0.9.zip",
+        "checksum": "985c8364853c998ccd8372823a1558f0",
+        "timestamp": "2026-06-25T12:00:55Z"
+      },
+      {
         "version": "1.0.8.0",
         "changelog": "fix: inject script tag via middleware — button now appears without companion plugins\n\nThe script tag is now injected by an ASP.NET Core IStartupFilter that\nintercepts index.html responses in Jellyfin's HTTP pipeline. No File\nTransformation plugin required, no disk writes, no timing sensitivity.\n\nAlso fixes plugin loading error in the admin UI (Plugin constructor now\ncalls SetAttributes).",
         "targetAbi": "10.11.8.0",
