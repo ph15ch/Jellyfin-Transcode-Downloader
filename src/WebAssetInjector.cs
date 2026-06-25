@@ -28,14 +28,19 @@ namespace Jellyfin.Plugin.QuickDownload
         private static string _basePath = string.Empty;
 
         /// <summary>
-        /// Builds the script tag, accounting for any configured base path so the
-        /// src resolves correctly when Jellyfin runs under a sub-path.
+        /// Builds the script tag for the given base path (e.g. "" or "/jellyfin").
         /// </summary>
-        public static string BuildScriptTag()
+        public static string BuildScriptTag(string basePath)
         {
             var version = typeof(WebAssetInjector).Assembly.GetName().Version?.ToString() ?? "0";
-            return $"<script src=\"{_basePath}/QuickDownload/ClientScript?v={version}\" defer></script>";
+            return $"<script src=\"{basePath}/QuickDownload/ClientScript?v={version}\" defer></script>";
         }
+
+        /// <summary>
+        /// Builds the script tag using the base path set at startup (for the
+        /// File Transformation and on-disk fallback paths).
+        /// </summary>
+        public static string BuildScriptTag() => BuildScriptTag(_basePath);
 
         /// <summary>
         /// Inject the client-script tag. Tries File Transformation first; if it is
