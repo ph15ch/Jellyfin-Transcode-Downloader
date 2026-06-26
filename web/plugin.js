@@ -126,6 +126,16 @@
     async function showQualitySheet() {
         if (document.getElementById('qd-quality-sheet')) return;
 
+        // Re-derive the item ID from the URL at open time; navigation may have happened
+        // before onHashChange fired, leaving currentItemId pointing at the previous item.
+        const liveItemId = extractItemId(window.location.hash);
+        if (liveItemId && liveItemId !== currentItemId) {
+            currentItem = null;
+            currentItemPromise = null;
+            currentItemId = liveItemId;
+            fetchItemMetadata(liveItemId);
+        }
+
         const scrim = document.createElement('div');
         scrim.id = 'qd-quality-sheet';
         scrim.style.cssText = 'position:fixed;inset:0;z-index:10000;display:flex;align-items:flex-end;justify-content:center;background:rgba(0,0,0,0.5);';
