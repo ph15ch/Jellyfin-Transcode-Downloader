@@ -1,8 +1,32 @@
 # Jellyfin Transcode Downloader
 
-A Jellyfin **server plugin** that adds a quality-selection download button to item detail
-pages. Pick a transcoded quality (H.264/AAC) or download the original file straight from
-the movie/episode page.
+![Transcode Downloader](logo.png)
+
+A Jellyfin **server plugin** that adds a quality-selection download option to the More menu
+on item detail pages. Pick a transcoded quality (H.264/AAC) or download the original file
+straight from the movie/episode page.
+
+## How to download
+
+After installing the plugin, open any **movie or episode detail page** in the Jellyfin web
+client. Open the **"More" menu** (the `⋯` / kebab menu on the detail page) — a
+**"Download (Transcode…)"** entry appears at the bottom of the list.
+
+Selecting it opens a quality picker. Choose a bitrate tier to transcode on the fly, or
+pick **Original** to grab the unmodified source file.
+
+### What happens in the background
+
+| Mode | What Jellyfin does |
+|---|---|
+| **Transcoded** (e.g. 4 Mbps) | Jellyfin encodes the video server-side to H.264/AAC at the selected bitrate and streams the result. The plugin downloads the stream chunk by chunk, shows a live progress bar with an estimated file size, and saves it as an `.mp4` once complete. |
+| **Original** | A direct download link is opened — no transcoding, no buffering into RAM. The browser saves whatever format Jellyfin has on disk. |
+
+The estimated file size shown during a transcoded download is calculated from the selected
+bitrate and the item's runtime (`~size = (bitrate + 128 kbps audio) × duration ÷ 8`). It
+carries a `~` prefix because VBR encoding means the real size can vary by ±10–15%.
+
+Cancelling mid-download aborts the in-progress request cleanly; no partial file is saved.
 
 ## How it works
 
@@ -16,7 +40,7 @@ Jellyfin web updates.
 ## Requirements
 
 - **Jellyfin 10.11.x** (built against the 10.11.8 SDK; ABI floor `10.11.8.0`).
-- **File Transformation plugin** (>= **v2.2.1.0**) — a required companion plugin.
+- **File Transformation plugin** (>= **v2.2.1.0**) — strongly recommended (see below).
 
 ### Installing File Transformation (one-time)
 
@@ -39,8 +63,7 @@ Jellyfin web updates.
 2. Install **Transcode Downloader** from the catalog.
 3. Restart Jellyfin.
 
-After restart, open a movie or episode detail page — the download button appears next to
-the other detail buttons. (`[QuickDownload] plugin loaded` prints in the browser console.)
+After restart, open a movie or episode detail page and open the More menu — **"Download (Transcode…)"** appears in the list. (`[TranscodeDownloader] plugin loaded` prints in the browser console.)
 
 ## Building from source
 
