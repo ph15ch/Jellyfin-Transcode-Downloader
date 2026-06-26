@@ -3,8 +3,8 @@
   <PropertyGroup>
     <!-- Jellyfin 10.11.x is built on .NET 9; its SDK packages target net9.0. -->
     <TargetFramework>net9.0</TargetFramework>
-    <AssemblyName>Jellyfin.Plugin.QuickDownload</AssemblyName>
-    <RootNamespace>Jellyfin.Plugin.QuickDownload</RootNamespace>
+    <AssemblyName>Jellyfin.Plugin.TranscodeDownloader</AssemblyName>
+    <RootNamespace>Jellyfin.Plugin.TranscodeDownloader</RootNamespace>
     <Version>0.0.0</Version>
     <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
@@ -28,11 +28,11 @@
     <PackageReference Include="Newtonsoft.Json" Version="13.0.1" PrivateAssets="All" />
   </ItemGroup>
 
-  <!-- The client script is embedded and served by QuickDownloadController; it is
+  <!-- The client script is embedded and served by TranscodeDownloaderController; it is
        never written to disk, so nothing is copied to the build output's web/ folder. -->
   <ItemGroup>
     <EmbeddedResource Include="..\web\plugin.js">
-      <LogicalName>Jellyfin.Plugin.QuickDownload.web.plugin.js</LogicalName>
+      <LogicalName>Jellyfin.Plugin.TranscodeDownloader.web.plugin.js</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
 

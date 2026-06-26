@@ -5,11 +5,11 @@ using MediaBrowser.Common.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-namespace Jellyfin.Plugin.QuickDownload
+namespace Jellyfin.Plugin.TranscodeDownloader
 {
     /// <summary>
-    /// On startup, injects the QuickDownload client-script tag into the Jellyfin web
-    /// client. The script itself is served by <see cref="QuickDownloadController"/>;
+    /// On startup, injects the Transcode Downloader client-script tag into the Jellyfin web
+    /// client. The script itself is served by <see cref="TranscodeDownloaderController"/>;
     /// this task only ensures the &lt;script&gt; tag reaches index.html (via the File
     /// Transformation plugin, or an on-disk fallback). No plugin.js is copied to disk.
     /// </summary>
@@ -36,7 +36,7 @@ namespace Jellyfin.Plugin.QuickDownload
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[QuickDownload] Failed to inject web assets");
+                _logger.LogError(ex, "[TranscodeDownloader] Failed to inject web assets");
             }
 
             return Task.CompletedTask;
@@ -63,7 +63,7 @@ namespace Jellyfin.Plugin.QuickDownload
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "[QuickDownload] Could not read network base path; assuming none.");
+                _logger.LogWarning(ex, "[TranscodeDownloader] Could not read network base path; assuming none.");
                 return string.Empty;
             }
         }

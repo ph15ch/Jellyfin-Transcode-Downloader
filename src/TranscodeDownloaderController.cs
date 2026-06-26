@@ -2,22 +2,22 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
-namespace Jellyfin.Plugin.QuickDownload
+namespace Jellyfin.Plugin.TranscodeDownloader
 {
     /// <summary>
-    /// Serves the embedded QuickDownload client script.
+    /// Serves the embedded Transcode Downloader client script.
     /// The browser loads it via a plain <c>&lt;script&gt;</c> tag with no API token,
     /// so the endpoint MUST allow anonymous access.
     /// </summary>
     [ApiController]
     [AllowAnonymous]
-    [Route("QuickDownload")]
-    public class QuickDownloadController : ControllerBase
+    [Route("TranscodeDownloader")]
+    public class TranscodeDownloaderController : ControllerBase
     {
-        private const string ResourceName = "Jellyfin.Plugin.QuickDownload.web.plugin.js";
+        private const string ResourceName = "Jellyfin.Plugin.TranscodeDownloader.web.plugin.js";
 
         /// <summary>
-        /// GET /QuickDownload/ClientScript — returns the embedded plugin.js.
+        /// GET /TranscodeDownloader/ClientScript — returns the embedded plugin.js.
         /// </summary>
         [HttpGet("ClientScript")]
         [ProducesResponseType(StatusCodes.Status200OK)]
@@ -25,7 +25,7 @@ namespace Jellyfin.Plugin.QuickDownload
         [Produces("application/javascript")]
         public ActionResult GetClientScript()
         {
-            var stream = typeof(QuickDownloadController).Assembly
+            var stream = typeof(TranscodeDownloaderController).Assembly
                 .GetManifestResourceStream(ResourceName);
 
             if (stream is null)

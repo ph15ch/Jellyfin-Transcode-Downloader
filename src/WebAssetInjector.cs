@@ -6,21 +6,21 @@ using System.Runtime.Loader;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
 
-namespace Jellyfin.Plugin.QuickDownload
+namespace Jellyfin.Plugin.TranscodeDownloader
 {
     /// <summary>
-    /// Delivers the QuickDownload client script tag into the Jellyfin web client.
+    /// Delivers the Transcode Downloader client script tag into the Jellyfin web client.
     ///
     /// Primary path (no disk writes): reflectively register an in-memory index.html
     /// transformation with the File Transformation plugin, which rewrites the HTML
     /// as it is served. Fallback (writable installs only): patch index.html on disk.
     ///
-    /// The JS itself is always served by <see cref="QuickDownloadController"/>; this
+    /// The JS itself is always served by <see cref="TranscodeDownloaderController"/>; this
     /// class only injects the &lt;script&gt; tag that loads it.
     /// </summary>
     public static class WebAssetInjector
     {
-        public const string Marker = "<!-- QuickDownload -->";
+        public const string Marker = "<!-- TranscodeDownloader -->";
 
         // The configured base path (e.g. "/jellyfin"), normalized to "" or "/seg".
         // Set once at startup so the transformation callback (which runs later, per
@@ -33,7 +33,7 @@ namespace Jellyfin.Plugin.QuickDownload
         public static string BuildScriptTag(string basePath)
         {
             var version = typeof(WebAssetInjector).Assembly.GetName().Version?.ToString() ?? "0";
-            return $"<script src=\"{basePath}/QuickDownload/ClientScript?v={version}\" defer></script>";
+            return $"<script src=\"{basePath}/TranscodeDownloader/ClientScript?v={version}\" defer></script>";
         }
 
         /// <summary>
@@ -53,12 +53,12 @@ namespace Jellyfin.Plugin.QuickDownload
             if (TryRegisterFileTransformation(logger))
             {
                 logger.LogInformation(
-                    "[QuickDownload] Registered index.html transformation with the File Transformation plugin (in-memory, no disk writes).");
+                    "[TranscodeDownloader] Registered index.html transformation with the File Transformation plugin (in-memory, no disk writes).");
                 return;
             }
 
             logger.LogWarning(
-                "[QuickDownload] File Transformation plugin not found. Falling back to on-disk index.html patch. "
+                "[TranscodeDownloader] File Transformation plugin not found. Falling back to on-disk index.html patch. "
                 + "For permission-safe injection that survives Jellyfin web updates, install the File Transformation plugin (>= v2.2.1.0).");
 
             TryOnDiskFallback(webPath, logger);
@@ -102,7 +102,7 @@ namespace Jellyfin.Plugin.QuickDownload
                 if (pluginInterface is null)
                 {
                     logger.LogWarning(
-                        "[QuickDownload] File Transformation assembly found but PluginInterface type was missing; using fallback.");
+                        "[TranscodeDownloader] File Transformation assembly found but PluginInterface type was missing; using fallback.");
                     return false;
                 }
 
@@ -110,7 +110,7 @@ namespace Jellyfin.Plugin.QuickDownload
                 if (register is null)
                 {
                     logger.LogWarning(
-                        "[QuickDownload] File Transformation PluginInterface has no RegisterTransformation method; using fallback.");
+                        "[TranscodeDownloader] File Transformation PluginInterface has no RegisterTransformation method; using fallback.");
                     return false;
                 }
 
@@ -119,8 +119,8 @@ namespace Jellyfin.Plugin.QuickDownload
                     { "id", Plugin.PluginId.ToString() },
                     { "fileNamePattern", "index.html" },
                     { "callbackAssembly", typeof(WebAssetInjector).Assembly.FullName },
-                    { "callbackClass", typeof(QuickDownloadTransformation).FullName },
-                    { "callbackMethod", nameof(QuickDownloadTransformation.IndexHtml) }
+                    { "callbackClass", typeof(TranscodeDownloaderTransformation).FullName },
+                    { "callbackMethod", nameof(TranscodeDownloaderTransformation.IndexHtml) }
                 };
 
                 register.Invoke(null, new object?[] { payload });
@@ -129,7 +129,7 @@ namespace Jellyfin.Plugin.QuickDownload
             catch (Exception ex)
             {
                 logger.LogWarning(ex,
-                    "[QuickDownload] Failed to register with the File Transformation plugin; using fallback.");
+                    "[TranscodeDownloader] Failed to register with the File Transformation plugin; using fallback.");
                 return false;
             }
         }
@@ -141,7 +141,7 @@ namespace Jellyfin.Plugin.QuickDownload
                 var indexPath = Path.Combine(webPath, "index.html");
                 if (!File.Exists(indexPath))
                 {
-                    logger.LogWarning("[QuickDownload] index.html not found in {WebPath}", webPath);
+                    logger.LogWarning("[TranscodeDownloader] index.html not found in {WebPath}", webPath);
                     return;
                 }
 
@@ -149,13 +149,13 @@ namespace Jellyfin.Plugin.QuickDownload
 
                 if (html.Contains(Marker, StringComparison.Ordinal))
                 {
-                    logger.LogInformation("[QuickDownload] Script tag already present in index.html");
+                    logger.LogInformation("[TranscodeDownloader] Script tag already present in index.html");
                     return;
                 }
 
                 if (!html.Contains("</body>", StringComparison.OrdinalIgnoreCase))
                 {
-                    logger.LogWarning("[QuickDownload] No </body> in index.html — cannot inject script");
+                    logger.LogWarning("[TranscodeDownloader] No </body> in index.html — cannot inject script");
                     return;
                 }
 
@@ -165,20 +165,20 @@ namespace Jellyfin.Plugin.QuickDownload
                     StringComparison.OrdinalIgnoreCase);
 
                 File.WriteAllText(indexPath, patched);
-                logger.LogInformation("[QuickDownload] Script tag injected into index.html (on-disk fallback)");
+                logger.LogInformation("[TranscodeDownloader] Script tag injected into index.html (on-disk fallback)");
             }
             catch (UnauthorizedAccessException ex)
             {
                 logger.LogError(ex,
-                    "[QuickDownload] Cannot write index.html: the Jellyfin web directory ({WebPath}) is read-only for the service user. "
-                    + "Install the File Transformation plugin (>= v2.2.1.0) so QuickDownload can inject its script in memory without filesystem writes. "
+                    "[TranscodeDownloader] Cannot write index.html: the Jellyfin web directory ({WebPath}) is read-only for the service user. "
+                    + "Install the File Transformation plugin (>= v2.2.1.0) so Transcode Downloader can inject its script in memory without filesystem writes. "
                     + "The download button will NOT appear until one of these is resolved.",
                     webPath);
             }
             catch (Exception ex)
             {
                 logger.LogError(ex,
-                    "[QuickDownload] Failed to patch index.html on disk. Install the File Transformation plugin (>= v2.2.1.0) "
+                    "[TranscodeDownloader] Failed to patch index.html on disk. Install the File Transformation plugin (>= v2.2.1.0) "
                     + "to inject without filesystem writes. The download button will NOT appear until this is resolved.");
             }
         }

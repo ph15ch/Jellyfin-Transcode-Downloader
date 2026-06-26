@@ -3,7 +3,7 @@ using MediaBrowser.Controller.Plugins;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Jellyfin.Plugin.QuickDownload
+namespace Jellyfin.Plugin.TranscodeDownloader
 {
     public class PluginServiceRegistrator : IPluginServiceRegistrator
     {

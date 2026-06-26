@@ -127,7 +127,7 @@ jobs:
           VERSION="${{ steps.meta.outputs.version }}"
           # The ONE knob: -p:Version drives the 4-part assembly version
           # (${VERSION}.0) and the reflection-derived JS cache-bust.
-          dotnet publish src/JellyfinQuickDownload.csproj \
+          dotnet publish src/JellyfinTranscodeDownloader.csproj \
             -c Release \
             -o publish/ \
             -p:Version="${VERSION}"
@@ -138,13 +138,13 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="${{ steps.meta.outputs.version }}"
-          ZIP_NAME="jellyfin-quickdownload_${VERSION}.zip"
+          ZIP_NAME="jellyfin-transcode-downloader_${VERSION}.zip"
 
           # The DLL is the only asset: plugin.js is embedded as a resource and
-          # served by QuickDownloadController. Nothing loads from disk, so the
+          # served by TranscodeDownloaderController. Nothing loads from disk, so the
           # zip is just the DLL.
           cd publish
-          zip -r "../${ZIP_NAME}" Jellyfin.Plugin.QuickDownload.dll
+          zip -r "../${ZIP_NAME}" Jellyfin.Plugin.TranscodeDownloader.dll
           cd ..
 
           CHECKSUM="$(md5sum "${ZIP_NAME}" | awk '{ print $1 }')"
@@ -235,5 +235,5 @@ jobs:
           set -euo pipefail
           gh release create "${GITHUB_REF_NAME}" \
             "${{ steps.package.outputs.zip_name }}" \
-            --title "QuickDownload ${{ steps.meta.outputs.version }}" \
+            --title "Transcode Downloader ${{ steps.meta.outputs.version }}" \
             --generate-notes

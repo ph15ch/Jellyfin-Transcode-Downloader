@@ -3,7 +3,7 @@ using System.IO;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Plugins;
 
-namespace Jellyfin.Plugin.QuickDownload
+namespace Jellyfin.Plugin.TranscodeDownloader
 {
     public class Plugin : BasePlugin
     {
@@ -19,7 +19,7 @@ namespace Jellyfin.Plugin.QuickDownload
                 assembly.GetName().Version);
         }
 
-        public override string Name => "QuickDownload";
+        public override string Name => "Transcode Downloader";
 
         public override Guid Id => PluginId;
     }
