@@ -1,19 +1,19 @@
 (() => {
     const QUALITY_TIERS = [
-        { label: '2160p · 120 Mbps', bitrate: 120_000_000 },
-        { label: '2160p · 80 Mbps',  bitrate:  80_000_000 },
-        { label: '2160p · 60 Mbps',  bitrate:  60_000_000 },
-        { label: '2160p · 40 Mbps',  bitrate:  40_000_000 },
-        { label: '2160p · 20 Mbps',  bitrate:  20_000_000 },
-        { label: '1440p · 15 Mbps',  bitrate:  15_000_000 },
-        { label: '1440p · 10 Mbps',  bitrate:  10_000_000 },
-        { label: '1080p · 8 Mbps',   bitrate:   8_000_000 },
-        { label: '1080p · 6 Mbps',   bitrate:   6_000_000 },
-        { label: '720p · 4 Mbps',    bitrate:   4_000_000 },
-        { label: '720p · 3 Mbps',    bitrate:   3_000_000 },
-        { label: '720p · 1.5 Mbps',  bitrate:   1_500_000 },
-        { label: '480p · 720 kbps',  bitrate:     720_000 },
-        { label: '360p · 420 kbps',  bitrate:     420_000 },
+        { label: '2160p · 120 Mbps', bitrate: 120_000_000, maxHeight: 2160 },
+        { label: '2160p · 80 Mbps',  bitrate:  80_000_000, maxHeight: 2160 },
+        { label: '2160p · 60 Mbps',  bitrate:  60_000_000, maxHeight: 2160 },
+        { label: '2160p · 40 Mbps',  bitrate:  40_000_000, maxHeight: 2160 },
+        { label: '2160p · 20 Mbps',  bitrate:  20_000_000, maxHeight: 2160 },
+        { label: '1440p · 15 Mbps',  bitrate:  15_000_000, maxHeight: 1440 },
+        { label: '1440p · 10 Mbps',  bitrate:  10_000_000, maxHeight: 1440 },
+        { label: '1080p · 8 Mbps',   bitrate:   8_000_000, maxHeight: 1080 },
+        { label: '1080p · 6 Mbps',   bitrate:   6_000_000, maxHeight: 1080 },
+        { label: '720p · 4 Mbps',    bitrate:   4_000_000, maxHeight:  720 },
+        { label: '720p · 3 Mbps',    bitrate:   3_000_000, maxHeight:  720 },
+        { label: '720p · 1.5 Mbps',  bitrate:   1_500_000, maxHeight:  720 },
+        { label: '480p · 720 kbps',  bitrate:     720_000, maxHeight:  480 },
+        { label: '360p · 420 kbps',  bitrate:     420_000, maxHeight:  360 },
     ];
 
     let currentItemId = null;
@@ -106,7 +106,7 @@
             for (const tier of QUALITY_TIERS) {
                 if (tier.bitrate < source.Bitrate) {
                     const opt = document.createElement('option');
-                    opt.value = String(tier.bitrate);
+                    opt.value = JSON.stringify({ bitrate: tier.bitrate, maxHeight: tier.maxHeight });
                     opt.textContent = tier.label;
                     select.appendChild(opt);
                 }
@@ -176,7 +176,6 @@
             return;
         }
         const select = document.getElementById('qd-quality-select');
-        const selectedBitrate = parseInt(select.value, 10);
         const item = currentItem;
         if (!item) return;
 
@@ -185,10 +184,11 @@
             const itemId = currentItemId;
             const baseUrl = client.serverAddress() || window.location.origin;
 
-            if (selectedBitrate === 0) {
+            if (select.value === '0') {
                 startOriginalDownload(baseUrl, itemId, token);
             } else {
-                startTranscodeDownload(baseUrl, itemId, token, selectedBitrate, item);
+                const { bitrate, maxHeight } = JSON.parse(select.value);
+                startTranscodeDownload(baseUrl, itemId, token, bitrate, maxHeight, item);
             }
         });
     }
@@ -206,8 +206,8 @@
         setTimeout(hideStatusBar, 3000);
     }
 
-    function startTranscodeDownload(baseUrl, itemId, token, selectedBitrate, item) {
-        const url = `${baseUrl}/Videos/${itemId}/stream.mp4?MaxStreamingBitrate=${selectedBitrate}&VideoCodec=h264&AudioCodec=aac&MaxAudioChannels=2&Static=false&api_key=${token}`;
+    function startTranscodeDownload(baseUrl, itemId, token, selectedBitrate, maxHeight, item) {
+        const url = `${baseUrl}/Videos/${itemId}/stream.mp4?MaxStreamingBitrate=${selectedBitrate}&MaxHeight=${maxHeight}&VideoCodec=h264&AudioCodec=aac&MaxAudioChannels=2&allowVideoStreamCopy=false&allowAudioStreamCopy=false&Static=false&api_key=${token}`;
 
         const pad = (n) => String(n).padStart(2, '0');
         let filename;
@@ -220,7 +220,7 @@
         }
 
         const durationSeconds = item.RunTimeTicks / 10_000_000;
-        const estimatedBytes = ((selectedBitrate + 128_000) * durationSeconds) / 8;
+        const estimatedBytes = (selectedBitrate * durationSeconds) / 8;
 
         isDownloading = true;
         currentAbortController = new AbortController();
