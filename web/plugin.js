@@ -36,15 +36,29 @@
         );
     }
 
-    function ensureUiInjected(attempt = 0) {
+    let _containerObserver = null;
+
+    function waitForContainer(callback) {
+        const container = findContainer();
+        if (container) { callback(container); return; }
+
+        if (_containerObserver) _containerObserver.disconnect();
+        _containerObserver = new MutationObserver(() => {
+            const c = findContainer();
+            if (c) {
+                _containerObserver.disconnect();
+                _containerObserver = null;
+                callback(c);
+            }
+        });
+        _containerObserver.observe(document.body, { childList: true, subtree: true });
+    }
+
+    function ensureUiInjected() {
         if (document.getElementById('qd-download-wrap')) return;
 
-        const container = findContainer();
-        if (!container) {
-            if (attempt < 20) setTimeout(() => ensureUiInjected(attempt + 1), 250);
-            else console.warn('[QuickDownload] Container not found after retries');
-            return;
-        }
+        waitForContainer((container) => {
+            if (document.getElementById('qd-download-wrap')) return;
 
         const wrap = document.createElement('div');
         wrap.id = 'qd-download-wrap';
@@ -66,6 +80,7 @@
 
         // If metadata already arrived before the UI was ready, populate now
         if (currentItem) populateDropdown(currentItem);
+        }); // waitForContainer
     }
 
     function populateDropdown(item) {
@@ -137,12 +152,20 @@
 
     function onHashChange() {
         const hash = window.location.hash;
-        if (!hash.startsWith('#/details')) return;
+        if (!hash.startsWith('#/details')) {
+            if (_containerObserver) { _containerObserver.disconnect(); _containerObserver = null; }
+            return;
+        }
 
         const itemId = extractItemId(hash);
         if (!itemId) return;
 
-        if (currentItemId !== itemId) currentItem = null;
+        if (currentItemId !== itemId) {
+            currentItem = null;
+            // Remove stale UI so it gets re-injected in the new view
+            const stale = document.getElementById('qd-download-wrap');
+            if (stale) stale.remove();
+        }
         currentItemId = itemId;
         ensureUiInjected();
         fetchItemMetadata(itemId);
