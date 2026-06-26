@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/ph15ch/Jellyfin-Transcode-Downloader/main/logo.png",
     "versions": [
       {
+        "version": "1.0.17.0",
+        "changelog": "fix: show plugin logo in catalog and installed plugin detail page\n\n- Add imageUrl to manifest.json so the catalog displays the logo\n- Include logo.png in the release zip for the installed plugin detail page",
+        "targetAbi": "10.11.8.0",
+        "sourceUrl": "https://github.com/ph15ch/Jellyfin-Transcode-Downloader/releases/download/v1.0.17/jellyfin-transcode-downloader_1.0.17.zip",
+        "checksum": "8cd61531b980d614de56f74ebe4a5a43",
+        "timestamp": "2026-06-26T20:20:27Z"
+      },
+      {
         "version": "1.0.16.0",
         "changelog": "rename: QuickDownload → Transcode Downloader + add logo and build CI\n\n- Plugin display name is now \"Transcode Downloader\"\n- All internals renamed to Jellyfin.Plugin.TranscodeDownloader\n- Controller route changed to /TranscodeDownloader/ClientScript\n- Added logo.png\n- Added PR build workflow",
         "targetAbi": "10.11.8.0",
