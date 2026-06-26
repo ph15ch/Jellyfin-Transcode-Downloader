@@ -20,6 +20,7 @@
     let isDownloading = false;
     let currentAbortController = null;
     let currentItem = null;
+    let currentItemPromise = null;
 
     function extractItemId(hash) {
         const queryStart = hash.indexOf('?');
@@ -38,16 +39,19 @@
         }
     }
 
-    async function fetchItemMetadata(itemId) {
-        getApiClient(0, 5, async (client) => {
-            try {
-                const userId = client.getCurrentUserId();
-                const item = await client.getItem(userId, itemId);
-                if (itemId !== currentItemId) return;
-                currentItem = item;
-            } catch (err) {
-                console.error('[QuickDownload] Metadata fetch failed:', err);
-            }
+    function fetchItemMetadata(itemId) {
+        currentItemPromise = new Promise((resolve) => {
+            getApiClient(0, 10, async (client) => {
+                try {
+                    const userId = client.getCurrentUserId();
+                    const item = await client.getItem(userId, itemId);
+                    if (itemId === currentItemId) currentItem = item;
+                    resolve(item);
+                } catch (err) {
+                    console.error('[QuickDownload] Metadata fetch failed:', err);
+                    resolve(null);
+                }
+            });
         });
     }
 
@@ -60,6 +64,7 @@
 
         if (currentItemId !== itemId) {
             currentItem = null;
+            currentItemPromise = null;
         }
         currentItemId = itemId;
         fetchItemMetadata(itemId);
@@ -118,15 +123,8 @@
 
     // --- Quality overlay ---
 
-    function showQualitySheet() {
+    async function showQualitySheet() {
         if (document.getElementById('qd-quality-sheet')) return;
-
-        const item = currentItem;
-        const source = item && item.MediaSources && item.MediaSources[0];
-
-        const tiers = source && source.Bitrate
-            ? QUALITY_TIERS.filter(t => t.bitrate < source.Bitrate)
-            : QUALITY_TIERS;
 
         const scrim = document.createElement('div');
         scrim.id = 'qd-quality-sheet';
@@ -140,6 +138,25 @@
         header.style.cssText = 'padding:16px 20px 8px;font-size:15px;font-weight:600;color:#fff;opacity:0.7;';
         header.textContent = 'Qualität wählen';
         sheet.appendChild(header);
+
+        const loadingEl = document.createElement('div');
+        loadingEl.style.cssText = 'padding:16px 20px;color:#aaa;font-size:14px;';
+        loadingEl.textContent = 'Lade Medieninfos…';
+        sheet.appendChild(loadingEl);
+
+        scrim.appendChild(sheet);
+        document.body.appendChild(scrim);
+
+        // Wait for metadata so we can filter tiers to valid bitrates only
+        const item = currentItem || (currentItemPromise ? await currentItemPromise : null);
+        if (!document.getElementById('qd-quality-sheet')) return; // sheet dismissed while loading
+
+        loadingEl.remove();
+
+        const source = item && item.MediaSources && item.MediaSources[0];
+        const tiers = source && source.Bitrate
+            ? QUALITY_TIERS.filter(t => t.bitrate < source.Bitrate)
+            : QUALITY_TIERS;
 
         for (const tier of tiers) {
             const btn = makeMenuItem('video_settings', tier.label, () => {
@@ -155,9 +172,6 @@
             empty.textContent = 'Keine Transcode-Optionen verfügbar.';
             sheet.appendChild(empty);
         }
-
-        scrim.appendChild(sheet);
-        document.body.appendChild(scrim);
     }
 
     // --- Download actions ---
