@@ -7,11 +7,11 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 
-namespace Jellyfin.Plugin.QuickDownload
+namespace Jellyfin.Plugin.TranscodeDownloader
 {
     /// <summary>
     /// ASP.NET Core startup filter that intercepts every response for index.html
-    /// and injects the QuickDownload script tag before &lt;/body&gt;. Works at the
+    /// and injects the Transcode Downloader script tag before &lt;/body&gt;. Works at the
     /// HTTP pipeline level — no disk writes, no File Transformation dependency.
     /// </summary>
     public class IndexHtmlInjectionFilter : IStartupFilter
@@ -87,7 +87,7 @@ namespace Jellyfin.Plugin.QuickDownload
 
                     if (!_logged)
                     {
-                        _logger.LogInformation("[QuickDownload] Script tag injected into index.html (middleware).");
+                        _logger.LogInformation("[TranscodeDownloader] Script tag injected into index.html (middleware).");
                         _logged = true;
                     }
                 }

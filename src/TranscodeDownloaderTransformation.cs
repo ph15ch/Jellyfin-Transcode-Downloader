@@ -1,7 +1,7 @@
 using System;
 using System.Text.Json.Serialization;
 
-namespace Jellyfin.Plugin.QuickDownload
+namespace Jellyfin.Plugin.TranscodeDownloader
 {
     /// <summary>
     /// Payload handed to the File Transformation callback. The File Transformation
@@ -17,11 +17,11 @@ namespace Jellyfin.Plugin.QuickDownload
 
     /// <summary>
     /// In-memory index.html transformation registered with the File Transformation
-    /// plugin. Inserts the QuickDownload client-script tag just before
+    /// plugin. Inserts the Transcode Downloader client-script tag just before
     /// <c>&lt;/body&gt;</c>. No disk writes occur — File Transformation rewrites the
     /// HTML as it is served.
     /// </summary>
-    public static class QuickDownloadTransformation
+    public static class TranscodeDownloaderTransformation
     {
         /// <summary>
         /// Callback invoked by the File Transformation plugin for index.html.
