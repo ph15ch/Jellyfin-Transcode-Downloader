@@ -8,6 +8,14 @@
     "owner": "philip",
     "versions": [
       {
+        "version": "1.0.14.0",
+        "changelog": "Fix: force transcode to honour selected quality tier\n\nWithout allowVideoStreamCopy=false Jellyfin could direct-stream the\noriginal file, ignoring MaxStreamingBitrate and MaxHeight entirely.\nDownloads now correctly re-encode to the selected resolution and bitrate.",
+        "targetAbi": "10.11.8.0",
+        "sourceUrl": "https://github.com/ph15ch/Jellyfin-Transcode-Downloader/releases/download/v1.0.14/jellyfin-quickdownload_1.0.14.zip",
+        "checksum": "a9af787aef8d3a8272f87ad78f9f39b5",
+        "timestamp": "2026-06-26T19:08:31Z"
+      },
+      {
         "version": "1.0.13.0",
         "changelog": "fix: delay revokeObjectURL to prevent download failure after completion",
         "targetAbi": "10.11.8.0",
