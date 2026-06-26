@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/ph15ch/Jellyfin-Transcode-Downloader/main/logo.png",
     "versions": [
       {
+        "version": "1.0.19.0",
+        "changelog": "Fix transcode quality tiers and stale item on first page load\n\n- On first load, quality sheet now awaits metadata before building the\n  tier list, so only valid bitrates (below source bitrate) are shown\n- Quality sheet now re-derives the item ID from the URL at open time,\n  preventing downloads targeting the previous movie when navigating\n  between items before the hash-change event fires",
+        "targetAbi": "10.11.8.0",
+        "sourceUrl": "https://github.com/ph15ch/Jellyfin-Transcode-Downloader/releases/download/v1.0.19/jellyfin-transcode-downloader_1.0.19.zip",
+        "checksum": "23dc4f812824da672dcbaa31cc858094",
+        "timestamp": "2026-06-26T21:04:23Z"
+      },
+      {
         "version": "1.0.18.0",
         "changelog": "Replace dropdown button with action sheet menu entry\n\n- Remove injected select+button from the detail page\n- Add 'Download (Transcode…)' entry to Jellyfin's native 'Mehr' menu\n- Quality selection via a second overlay in Jellyfin's action sheet style\n- Fixes reload-required bug; no longer disrupts the detail page layout",
         "targetAbi": "10.11.8.0",
