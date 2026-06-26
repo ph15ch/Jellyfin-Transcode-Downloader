@@ -121,14 +121,8 @@
     async function fetchItemMetadata(itemId) {
         getApiClient(0, 5, async (client) => {
             try {
-                const token = client.accessToken();
                 const userId = client.getCurrentUserId();
-                const baseUrl = client.serverAddress() || window.location.origin;
-                const url = `${baseUrl}/Users/${userId}/Items/${itemId}?api_key=${token}`;
-
-                const response = await fetch(url);
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                const item = await response.json();
+                const item = await client.getItem(userId, itemId);
 
                 // Guard against stale response arriving after user navigated away
                 if (itemId !== currentItemId) return;
