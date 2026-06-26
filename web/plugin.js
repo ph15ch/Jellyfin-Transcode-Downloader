@@ -28,101 +28,6 @@
         return params.get('id');
     }
 
-    function findContainer() {
-        return (
-            document.querySelector('.mainDetailButtons') ||
-            document.querySelector('.detailButtons') ||
-            document.querySelector('[class*="detailButton"]')
-        );
-    }
-
-    let _containerObserver = null;
-
-    function waitForContainer(callback) {
-        const container = findContainer();
-        if (container) { callback(container); return; }
-
-        if (_containerObserver) _containerObserver.disconnect();
-        _containerObserver = new MutationObserver(() => {
-            const c = findContainer();
-            if (c) {
-                _containerObserver.disconnect();
-                _containerObserver = null;
-                callback(c);
-            }
-        });
-        _containerObserver.observe(document.body, { childList: true, subtree: true });
-    }
-
-    function ensureUiInjected() {
-        if (document.getElementById('qd-download-wrap')) return;
-
-        waitForContainer((container) => {
-            if (document.getElementById('qd-download-wrap')) return;
-
-        const wrap = document.createElement('div');
-        wrap.id = 'qd-download-wrap';
-        wrap.style.cssText = 'display:flex;flex-direction:row;align-items:center;gap:8px;margin-top:8px;';
-
-        const select = document.createElement('select');
-        select.id = 'qd-quality-select';
-        select.style.cssText = 'padding:6px 8px;border-radius:4px;border:1px solid #555;background:#222;color:#fff;font-size:14px;';
-
-        const btn = document.createElement('button');
-        btn.id = 'qd-download-btn';
-        btn.textContent = 'Download';
-        btn.style.cssText = 'padding:6px 14px;border-radius:4px;border:none;background:#00a4dc;color:#fff;font-size:14px;cursor:pointer;';
-        btn.addEventListener('click', () => startDownload());
-
-        wrap.appendChild(select);
-        wrap.appendChild(btn);
-        container.appendChild(wrap);
-
-        // If metadata already arrived before the UI was ready, populate now
-        if (currentItem) populateDropdown(currentItem);
-        }); // waitForContainer
-    }
-
-    function populateDropdown(item) {
-        currentItem = item;
-
-        const select = document.getElementById('qd-quality-select');
-        if (!select) return;
-
-        select.innerHTML = '';
-
-        const source = item.MediaSources && item.MediaSources[0];
-
-        const originalLabel = source
-            ? `Original · ${(source.Container || 'unknown').toUpperCase()} · ${Math.round((source.Bitrate || 0) / 1_000_000)} Mbps`
-            : 'Original';
-
-        const originalOpt = document.createElement('option');
-        originalOpt.value = '0';
-        originalOpt.textContent = originalLabel;
-        select.appendChild(originalOpt);
-
-        if (source && source.Bitrate) {
-            for (const tier of QUALITY_TIERS) {
-                if (tier.bitrate < source.Bitrate) {
-                    const opt = document.createElement('option');
-                    opt.value = JSON.stringify({ bitrate: tier.bitrate, maxHeight: tier.maxHeight });
-                    opt.textContent = tier.label;
-                    select.appendChild(opt);
-                }
-            }
-        }
-    }
-
-    function showDropdownError() {
-        const select = document.getElementById('qd-quality-select');
-        if (!select) return;
-        select.innerHTML = '';
-        const opt = document.createElement('option');
-        opt.textContent = 'Error';
-        select.appendChild(opt);
-    }
-
     function getApiClient(attempt, maxAttempts, callback) {
         if (window.ApiClient && window.ApiClient.accessToken && window.ApiClient.getCurrentUserId) {
             callback(window.ApiClient);
@@ -138,72 +43,132 @@
             try {
                 const userId = client.getCurrentUserId();
                 const item = await client.getItem(userId, itemId);
-
-                // Guard against stale response arriving after user navigated away
                 if (itemId !== currentItemId) return;
-
-                populateDropdown(item);
+                currentItem = item;
             } catch (err) {
                 console.error('[QuickDownload] Metadata fetch failed:', err);
-                if (itemId === currentItemId) showDropdownError();
             }
         });
     }
 
     function onHashChange() {
         const hash = window.location.hash;
-        if (!hash.startsWith('#/details')) {
-            if (_containerObserver) { _containerObserver.disconnect(); _containerObserver = null; }
-            return;
-        }
+        if (!hash.startsWith('#/details')) return;
 
         const itemId = extractItemId(hash);
         if (!itemId) return;
 
         if (currentItemId !== itemId) {
             currentItem = null;
-            // Remove stale UI so it gets re-injected in the new view
-            const stale = document.getElementById('qd-download-wrap');
-            if (stale) stale.remove();
         }
         currentItemId = itemId;
-        ensureUiInjected();
         fetchItemMetadata(itemId);
     }
 
-    function startDownload() {
-        if (isDownloading) {
-            return;
-        }
-        const select = document.getElementById('qd-quality-select');
-        const item = currentItem;
-        if (!item) return;
+    // --- Action sheet menu injection ---
 
-        getApiClient(0, 5, (client) => {
-            const token = client.accessToken();
-            const itemId = currentItemId;
-            const baseUrl = client.serverAddress() || window.location.origin;
+    function makeMenuItem(icon, label, onClick) {
+        const btn = document.createElement('button');
+        btn.setAttribute('is', 'emby-button');
+        btn.setAttribute('type', 'button');
+        btn.className = 'listItem listItem-button actionSheetMenuItem emby-button';
+        btn.setAttribute('data-id', 'qd-' + label.replace(/\s+/g, '-').toLowerCase());
 
-            if (select.value === '0') {
-                startOriginalDownload(baseUrl, itemId, token);
-            } else {
-                const { bitrate, maxHeight } = JSON.parse(select.value);
-                startTranscodeDownload(baseUrl, itemId, token, bitrate, maxHeight, item);
-            }
-        });
+        const iconSpan = document.createElement('span');
+        iconSpan.className = `actionsheetMenuItemIcon listItemIcon listItemIcon-transparent material-icons ${icon}`;
+        iconSpan.setAttribute('aria-hidden', 'true');
+
+        const body = document.createElement('div');
+        body.className = 'listItemBody actionsheetListItemBody';
+        const text = document.createElement('div');
+        text.className = 'listItemBodyText actionSheetItemText';
+        text.textContent = label;
+        body.appendChild(text);
+
+        btn.appendChild(iconSpan);
+        btn.appendChild(body);
+        btn.addEventListener('click', onClick);
+        return btn;
     }
 
-    function startOriginalDownload(baseUrl, itemId, token) {
-        const url = `${baseUrl}/Items/${itemId}/Download?api_key=${token}`;
-        showStatusBar('Downloading original…');
-        setStatusText('Browser download manager will handle this.');
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = '';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        setTimeout(hideStatusBar, 3000);
+    function injectMenuItems(downloadBtn) {
+        if (downloadBtn.parentNode.querySelector('[data-id^="qd-"]')) return;
+
+        const transcodeBtn = makeMenuItem('video_settings', 'Download (Transcode…)', () => {
+            closeActiveSheet();
+            showQualitySheet();
+        });
+
+        downloadBtn.insertAdjacentElement('afterend', transcodeBtn);
+    }
+
+    function closeActiveSheet() {
+        // Jellyfin closes the sheet when any item is clicked via its own listener;
+        // nudge it in case our synthetic handler fires before theirs.
+        const backdrop = document.querySelector('.actionSheetScrim, .dialogBackdrop, .mdl-overlay');
+        if (backdrop) backdrop.click();
+    }
+
+    // Watch for Jellyfin's "mehr" menu opening
+    const _menuObserver = new MutationObserver(() => {
+        const downloadBtn = document.querySelector('.actionSheetMenuItem[data-id="download"]');
+        if (downloadBtn) injectMenuItems(downloadBtn);
+    });
+    _menuObserver.observe(document.body, { childList: true, subtree: true });
+
+    // --- Quality overlay ---
+
+    function showQualitySheet() {
+        if (document.getElementById('qd-quality-sheet')) return;
+
+        const item = currentItem;
+        const source = item && item.MediaSources && item.MediaSources[0];
+
+        const tiers = source && source.Bitrate
+            ? QUALITY_TIERS.filter(t => t.bitrate < source.Bitrate)
+            : QUALITY_TIERS;
+
+        const scrim = document.createElement('div');
+        scrim.id = 'qd-quality-sheet';
+        scrim.style.cssText = 'position:fixed;inset:0;z-index:10000;display:flex;align-items:flex-end;justify-content:center;background:rgba(0,0,0,0.5);';
+        scrim.addEventListener('click', (e) => { if (e.target === scrim) scrim.remove(); });
+
+        const sheet = document.createElement('div');
+        sheet.style.cssText = 'background:#1a1a1a;border-radius:12px 12px 0 0;width:100%;max-width:600px;max-height:80vh;overflow-y:auto;padding:8px 0 24px;';
+
+        const header = document.createElement('div');
+        header.style.cssText = 'padding:16px 20px 8px;font-size:15px;font-weight:600;color:#fff;opacity:0.7;';
+        header.textContent = 'Qualität wählen';
+        sheet.appendChild(header);
+
+        for (const tier of tiers) {
+            const btn = makeMenuItem('video_settings', tier.label, () => {
+                scrim.remove();
+                onTranscodeMenuClick(tier.bitrate, tier.maxHeight);
+            });
+            sheet.appendChild(btn);
+        }
+
+        if (tiers.length === 0) {
+            const empty = document.createElement('div');
+            empty.style.cssText = 'padding:16px 20px;color:#aaa;font-size:14px;';
+            empty.textContent = 'Keine Transcode-Optionen verfügbar.';
+            sheet.appendChild(empty);
+        }
+
+        scrim.appendChild(sheet);
+        document.body.appendChild(scrim);
+    }
+
+    // --- Download actions ---
+
+    function onTranscodeMenuClick(bitrate, maxHeight) {
+        if (!currentItem) return;
+        getApiClient(0, 5, (client) => {
+            const token = client.accessToken();
+            const baseUrl = client.serverAddress() || window.location.origin;
+            startTranscodeDownload(baseUrl, currentItemId, token, bitrate, maxHeight, currentItem);
+        });
     }
 
     function startTranscodeDownload(baseUrl, itemId, token, selectedBitrate, maxHeight, item) {
@@ -237,9 +202,7 @@
                 setTimeout(hideStatusBar, 1000);
             })
             .catch(err => {
-                if (err.name === 'AbortError') {
-                    // user cancelled — already cleaned up in cancelDownload()
-                } else {
+                if (err.name !== 'AbortError') {
                     console.error('[QuickDownload] Download failed:', err);
                     setStatusText('Download failed.');
                     setTimeout(hideStatusBar, 3000);
@@ -311,9 +274,7 @@
     }
 
     function cancelDownload() {
-        if (currentAbortController) {
-            currentAbortController.abort();
-        }
+        if (currentAbortController) currentAbortController.abort();
         isDownloading = false;
         currentAbortController = null;
         hideStatusBar();
@@ -342,7 +303,6 @@
     console.log('[QuickDownload] plugin loaded');
     window.addEventListener('hashchange', onHashChange);
 
-    // Handle the case where the page loads directly on a detail route
     if (window.location.hash.startsWith('#/details')) {
         onHashChange();
     }
