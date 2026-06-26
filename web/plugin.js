@@ -207,7 +207,7 @@
     }
 
     function startTranscodeDownload(baseUrl, itemId, token, selectedBitrate, maxHeight, item) {
-        const url = `${baseUrl}/Videos/${itemId}/stream.mp4?MaxStreamingBitrate=${selectedBitrate}&MaxHeight=${maxHeight}&VideoCodec=h264&AudioCodec=aac&MaxAudioChannels=2&Static=false&api_key=${token}`;
+        const url = `${baseUrl}/Videos/${itemId}/stream.mp4?MaxStreamingBitrate=${selectedBitrate}&MaxHeight=${maxHeight}&VideoCodec=h264&AudioCodec=aac&MaxAudioChannels=2&allowVideoStreamCopy=false&allowAudioStreamCopy=false&Static=false&api_key=${token}`;
 
         const pad = (n) => String(n).padStart(2, '0');
         let filename;
