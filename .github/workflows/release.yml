@@ -140,11 +140,11 @@ jobs:
           VERSION="${{ steps.meta.outputs.version }}"
           ZIP_NAME="jellyfin-transcode-downloader_${VERSION}.zip"
 
-          # The DLL is the only asset: plugin.js is embedded as a resource and
-          # served by TranscodeDownloaderController. Nothing loads from disk, so the
-          # zip is just the DLL.
+          # The DLL is the primary asset; logo.png is included so Jellyfin can
+          # display the plugin image on the detail page after installation.
+          cp logo.png publish/
           cd publish
-          zip -r "../${ZIP_NAME}" Jellyfin.Plugin.TranscodeDownloader.dll
+          zip -r "../${ZIP_NAME}" Jellyfin.Plugin.TranscodeDownloader.dll logo.png
           cd ..
 
           CHECKSUM="$(md5sum "${ZIP_NAME}" | awk '{ print $1 }')"

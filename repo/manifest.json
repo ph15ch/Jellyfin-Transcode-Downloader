@@ -6,6 +6,7 @@
     "description": "Adds a quality-selection download button to Jellyfin item detail pages.",
     "overview": "Download movies and episodes directly from the detail page. Choose transcoded quality (H.264/AAC) or download the original file. Requires the File Transformation companion plugin (>= v2.2.1.0) for permission-safe script injection.",
     "owner": "philip",
+    "imageUrl": "https://raw.githubusercontent.com/ph15ch/Jellyfin-Transcode-Downloader/main/logo.png",
     "versions": [
       {
         "version": "1.0.16.0",
