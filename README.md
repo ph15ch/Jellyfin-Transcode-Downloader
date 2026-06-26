@@ -1,8 +1,32 @@
 # Jellyfin Transcode Downloader
 
+![Transcode Downloader](logo.png)
+
 A Jellyfin **server plugin** that adds a quality-selection download button to item detail
 pages. Pick a transcoded quality (H.264/AAC) or download the original file straight from
 the movie/episode page.
+
+## The download button
+
+After installing the plugin, open any **movie or episode detail page** in the Jellyfin web
+client. A **Download** button appears alongside the existing action buttons (Play, Trailer,
+etc.) in the detail button row below the title and metadata.
+
+Clicking it opens a small quality picker. Select a bitrate tier to transcode on the fly, or
+choose **Original** to grab the unmodified source file.
+
+### What happens in the background
+
+| Mode | What Jellyfin does |
+|---|---|
+| **Transcoded** (e.g. 4 Mbps) | Jellyfin encodes the video server-side to H.264/AAC at the selected bitrate and streams the result. The plugin downloads the stream chunk by chunk, shows a live progress bar with an estimated file size, and saves it as an `.mp4` once complete. |
+| **Original** | A direct download link is opened — no transcoding, no buffering into RAM. The browser saves whatever format Jellyfin has on disk. |
+
+The estimated file size shown during a transcoded download is calculated from the selected
+bitrate and the item's runtime (`~size = (bitrate + 128 kbps audio) × duration ÷ 8`). It
+carries a `~` prefix because VBR encoding means the real size can vary by ±10–15%.
+
+Cancelling mid-download aborts the in-progress request cleanly; no partial file is saved.
 
 ## How it works
 
