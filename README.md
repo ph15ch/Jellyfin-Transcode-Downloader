@@ -63,7 +63,7 @@ Jellyfin web updates.
 2. Install **Transcode Downloader** from the catalog.
 3. Restart Jellyfin.
 
-After restart, open a movie or episode detail page and open the More menu — **"Download (Transcode…)"** appears in the list. (`[QuickDownload] plugin loaded` prints in the browser console.)
+After restart, open a movie or episode detail page and open the More menu — **"Download (Transcode…)"** appears in the list. (`[TranscodeDownloader] plugin loaded` prints in the browser console.)
 
 ## Building from source
 

@@ -35,7 +35,7 @@
         } else if (attempt < maxAttempts) {
             setTimeout(() => getApiClient(attempt + 1, maxAttempts, callback), 500);
         } else {
-            console.error('[QuickDownload] ApiClient not available after retries');
+            console.error('[TranscodeDownloader] ApiClient not available after retries');
         }
     }
 
@@ -48,7 +48,7 @@
                     if (itemId === currentItemId) currentItem = item;
                     resolve(item);
                 } catch (err) {
-                    console.error('[QuickDownload] Metadata fetch failed:', err);
+                    console.error('[TranscodeDownloader] Metadata fetch failed:', err);
                     resolve(null);
                 }
             });
@@ -227,7 +227,7 @@
             })
             .catch(err => {
                 if (err.name !== 'AbortError') {
-                    console.error('[QuickDownload] Download failed:', err);
+                    console.error('[TranscodeDownloader] Download failed:', err);
                     setStatusText('Download failed.');
                     setTimeout(hideStatusBar, 3000);
                 }
@@ -324,7 +324,7 @@
         document.getElementById('qd-cancel-btn').addEventListener('click', cancelDownload);
     }
 
-    console.log('[QuickDownload] plugin loaded');
+    console.log('[TranscodeDownloader] plugin loaded');
     window.addEventListener('hashchange', onHashChange);
 
     if (window.location.hash.startsWith('#/details')) {
