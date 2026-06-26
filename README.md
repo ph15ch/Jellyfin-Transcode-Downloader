@@ -6,14 +6,14 @@ A Jellyfin **server plugin** that adds a quality-selection download button to it
 pages. Pick a transcoded quality (H.264/AAC) or download the original file straight from
 the movie/episode page.
 
-## The download button
+## How to download
 
 After installing the plugin, open any **movie or episode detail page** in the Jellyfin web
-client. A **Download** button appears alongside the existing action buttons (Play, Trailer,
-etc.) in the detail button row below the title and metadata.
+client. Open the **"More" menu** (the `⋯` / kebab menu on the detail page) — a
+**"Download (Transcode…)"** entry appears at the bottom of the list.
 
-Clicking it opens a small quality picker. Select a bitrate tier to transcode on the fly, or
-choose **Original** to grab the unmodified source file.
+Selecting it opens a quality picker. Choose a bitrate tier to transcode on the fly, or
+pick **Original** to grab the unmodified source file.
 
 ### What happens in the background
 

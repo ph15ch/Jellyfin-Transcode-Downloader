@@ -4,7 +4,7 @@
     "guid": "a4b5c6d7-e8f9-0a1b-2c3d-4e5f6a7b8c9d",
     "name": "Transcode Downloader",
     "description": "Adds a quality-selection download button to Jellyfin item detail pages.",
-    "overview": "Adds a Download button to the action row on every movie and episode detail page (next to Play and Trailer). Clicking it opens a quality picker — select a bitrate tier and Jellyfin re-encodes the video server-side to H.264/AAC, streaming it to your browser with a live progress bar, or choose Original to save the unmodified source file directly. Requires the File Transformation companion plugin (>= v2.2.1.0) for permission-safe script injection.",
+    "overview": "Adds a 'Download (Transcode…)' entry to the More menu on every movie and episode detail page. Selecting it opens a quality picker — choose a bitrate tier and Jellyfin re-encodes the video server-side to H.264/AAC, streaming it to your browser with a live progress bar, or pick Original to save the unmodified source file directly. Requires the File Transformation companion plugin (>= v2.2.1.0) for permission-safe script injection.",
     "owner": "philip",
     "imageUrl": "https://raw.githubusercontent.com/ph15ch/Jellyfin-Transcode-Downloader/main/logo.png",
     "versions": [
