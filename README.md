@@ -2,9 +2,9 @@
 
 ![Transcode Downloader](logo.png)
 
-A Jellyfin **server plugin** that adds a quality-selection download button to item detail
-pages. Pick a transcoded quality (H.264/AAC) or download the original file straight from
-the movie/episode page.
+A Jellyfin **server plugin** that adds a quality-selection download option to the More menu
+on item detail pages. Pick a transcoded quality (H.264/AAC) or download the original file
+straight from the movie/episode page.
 
 ## How to download
 
@@ -40,7 +40,7 @@ Jellyfin web updates.
 ## Requirements
 
 - **Jellyfin 10.11.x** (built against the 10.11.8 SDK; ABI floor `10.11.8.0`).
-- **File Transformation plugin** (>= **v2.2.1.0**) — a required companion plugin.
+- **File Transformation plugin** (>= **v2.2.1.0**) — strongly recommended (see below).
 
 ### Installing File Transformation (one-time)
 
@@ -63,8 +63,7 @@ Jellyfin web updates.
 2. Install **Transcode Downloader** from the catalog.
 3. Restart Jellyfin.
 
-After restart, open a movie or episode detail page — the download button appears next to
-the other detail buttons. (`[QuickDownload] plugin loaded` prints in the browser console.)
+After restart, open a movie or episode detail page and open the More menu — **"Download (Transcode…)"** appears in the list. (`[QuickDownload] plugin loaded` prints in the browser console.)
 
 ## Building from source
 
