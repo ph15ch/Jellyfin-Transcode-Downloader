@@ -94,18 +94,12 @@
     function injectMenuItems(downloadBtn) {
         if (downloadBtn.parentNode.querySelector('[data-id^="qd-"]')) return;
 
-        const originalBtn = makeMenuItem('file_download', 'Download (Original)', () => {
-            closeActiveSheet();
-            onOriginalMenuClick();
-        });
-
         const transcodeBtn = makeMenuItem('video_settings', 'Download (Transcode…)', () => {
             closeActiveSheet();
             showQualitySheet();
         });
 
         downloadBtn.insertAdjacentElement('afterend', transcodeBtn);
-        downloadBtn.insertAdjacentElement('afterend', originalBtn);
     }
 
     function closeActiveSheet() {
@@ -168,15 +162,6 @@
 
     // --- Download actions ---
 
-    function onOriginalMenuClick() {
-        if (!currentItem) return;
-        getApiClient(0, 5, (client) => {
-            const token = client.accessToken();
-            const baseUrl = client.serverAddress() || window.location.origin;
-            startOriginalDownload(baseUrl, currentItemId, token);
-        });
-    }
-
     function onTranscodeMenuClick(bitrate, maxHeight) {
         if (!currentItem) return;
         getApiClient(0, 5, (client) => {
@@ -184,19 +169,6 @@
             const baseUrl = client.serverAddress() || window.location.origin;
             startTranscodeDownload(baseUrl, currentItemId, token, bitrate, maxHeight, currentItem);
         });
-    }
-
-    function startOriginalDownload(baseUrl, itemId, token) {
-        const url = `${baseUrl}/Items/${itemId}/Download?api_key=${token}`;
-        showStatusBar('Downloading original…');
-        setStatusText('Browser download manager will handle this.');
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = '';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        setTimeout(hideStatusBar, 3000);
     }
 
     function startTranscodeDownload(baseUrl, itemId, token, selectedBitrate, maxHeight, item) {
