@@ -122,50 +122,70 @@
         }
 
         panel.style.display = 'block';
-        list.innerHTML = '';
 
-        downloadQueue.forEach(entry => {
-            const row = document.createElement('div');
-            row.id = `qd-entry-${entry.id}`;
-            row.style.cssText = 'padding:10px 14px;border-bottom:1px solid #2a2a2a;';
+        // Remove rows for entries that are no longer in the queue
+        Array.from(list.children).forEach(row => {
+            const entryId = row.dataset.entryId;
+            if (!downloadQueue.find(e => e.id === entryId)) row.remove();
+        });
 
-            const top = document.createElement('div');
-            top.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px;';
+        // Add rows for new entries and update status of existing ones
+        downloadQueue.forEach((entry, i) => {
+            let row = list.querySelector(`[data-entry-id="${entry.id}"]`);
 
-            const name = document.createElement('div');
-            name.style.cssText = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:bold;';
-            name.textContent = entry.filename;
+            if (!row) {
+                // Build the row for the first time
+                row = document.createElement('div');
+                row.dataset.entryId = entry.id;
+                row.style.cssText = 'padding:10px 14px;border-bottom:1px solid #2a2a2a;';
 
-            const cancelBtn = document.createElement('button');
-            cancelBtn.textContent = '✕';
-            cancelBtn.style.cssText = 'padding:2px 8px;border-radius:4px;border:1px solid #666;background:#333;color:#fff;cursor:pointer;font-size:12px;flex-shrink:0;';
-            cancelBtn.addEventListener('click', () => removeFromQueue(entry.id));
+                const top = document.createElement('div');
+                top.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px;';
 
-            top.appendChild(name);
-            top.appendChild(cancelBtn);
-            row.appendChild(top);
+                const name = document.createElement('div');
+                name.style.cssText = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:bold;';
+                name.textContent = entry.filename;
 
-            if (entry.status === 'active') {
+                const cancelBtn = document.createElement('button');
+                cancelBtn.textContent = '✕';
+                cancelBtn.style.cssText = 'padding:2px 8px;border-radius:4px;border:1px solid #666;background:#333;color:#fff;cursor:pointer;font-size:12px;flex-shrink:0;';
+                cancelBtn.addEventListener('click', () => removeFromQueue(entry.id));
+
+                top.appendChild(name);
+                top.appendChild(cancelBtn);
+                row.appendChild(top);
+
+                // Progress bar (always created; hidden for waiting items)
                 const track = document.createElement('div');
-                track.style.cssText = 'height:5px;background:#333;border-radius:3px;margin-bottom:4px;';
+                track.className = 'qd-track';
+                track.style.cssText = 'height:5px;background:#333;border-radius:3px;margin-bottom:4px;display:none;';
                 const fill = document.createElement('div');
                 fill.id = `qd-fill-${entry.id}`;
                 fill.style.cssText = 'height:100%;width:0%;background:#00a4dc;border-radius:3px;transition:width 0.2s;';
                 track.appendChild(fill);
                 row.appendChild(track);
 
-                const status = document.createElement('div');
-                status.id = `qd-status-${entry.id}`;
-                status.style.cssText = 'color:#aaa;font-size:12px;';
-                row.appendChild(status);
-            } else {
-                const waiting = document.createElement('div');
-                waiting.style.cssText = 'color:#666;font-size:12px;';
-                waiting.textContent = 'Waiting…';
-                row.appendChild(waiting);
+                const statusEl = document.createElement('div');
+                statusEl.id = `qd-status-${entry.id}`;
+                statusEl.style.cssText = 'font-size:12px;';
+                row.appendChild(statusEl);
+
+                // Insert at correct position
+                const sibling = list.children[i];
+                if (sibling) list.insertBefore(row, sibling);
+                else list.appendChild(row);
             }
 
-            list.appendChild(row);
+            // Update active/waiting appearance without touching the fill width
+            const track = row.querySelector('.qd-track');
+            const statusEl = row.querySelector(`#qd-status-${entry.id}`);
+            if (entry.status === 'active') {
+                if (track) track.style.display = 'block';
+                if (statusEl) statusEl.style.color = '#aaa';
+            } else {
+                if (track) track.style.display = 'none';
+                if (statusEl) { statusEl.style.color = '#666'; statusEl.textContent = 'Waiting…'; }
+            }
         });
     }
 
