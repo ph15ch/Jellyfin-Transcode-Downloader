@@ -72,18 +72,16 @@ The `?v=` query is the plugin assembly version, set at release time via
 
 ### Client logic (`web/plugin.js` — only its delivery is owned by C#; do not change its logic)
 
-- **Download URL — transcoded** (`selectedBitrate > 0`):
+- **Download URL — transcoded**:
   `/Videos/{itemId}/stream.mp4?MaxStreamingBitrate={bitrate}&VideoCodec=h264&AudioCodec=aac&MaxAudioChannels=2&Static=false&api_key={token}`
-- **Download URL — original** (`selectedBitrate === 0`): `/Items/{itemId}/Download?api_key={token}`
 - **Filename** (from `/Users/{userId}/Items/{itemId}`):
   - Movie: `"{Name} ({ProductionYear}).mp4"`
   - Episode: `"{SeriesName} S{SeasonNumber padded}E{EpisodeNumber padded} - {Name}.mp4"`
 - **Progress estimation:** `durationSeconds = RunTimeTicks / 10_000_000`;
-  transcode `estimatedBytes = ((bitrate + 128_000) * durationSeconds) / 8`;
-  original `MediaSources[0].Size`. ±10–15% (VBR) — show `~` prefix.
+  `estimatedBytes = (bitrate * durationSeconds) / 8`. ±10–15% (VBR) — show `~` prefix.
 - **Download flow:** `fetch()` + `response.body.getReader()` → progress bar → `Blob` →
-  `URL.createObjectURL()` → `<a download>` → `revokeObjectURL()`; `AbortController` for
-  cancel. Original-file downloads use a direct `<a href>` to avoid large RAM use.
+  `URL.createObjectURL()` → `<a download>` → `revokeObjectURL()`; `AbortController` for cancel.
+- **Original file download** is Jellyfin's own built-in Download button — not part of this plugin.
 - **UI injection:** `.mainDetailButtons` / `.detailButtons` (fallback chain), with a retry
   loop. Prints `[QuickDownload] plugin loaded` to the console on success.
 
@@ -133,5 +131,5 @@ Single-context repo: one `CONTEXT.md` + `docs/adr/` at the repo root. See
 | Controller auth | Endpoint is `[AllowAnonymous]` — a `<script>` load carries no token; otherwise it 401s and the button silently never appears |
 | Button injection selectors may change | `web/plugin.js` tries multiple selectors with a retry loop |
 | VBR bitrate variance | Show `~` in UI; ±10–15% is acceptable |
-| Blob for large files uses RAM | Direct `<a href>` for original downloads |
+| Transcoded downloads buffer into RAM | All downloads use fetch+Blob; size is bounded by the selected bitrate tier |
 | CORS | Non-issue — same origin as the Jellyfin web client |
