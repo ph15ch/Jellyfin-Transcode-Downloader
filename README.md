@@ -2,9 +2,9 @@
 
 ![Transcode Downloader](logo.png)
 
-A Jellyfin **server plugin** that adds a quality-selection download option to the More menu
-on item detail pages. Pick a transcoded quality (H.264/AAC) or download the original file
-straight from the movie/episode page.
+A Jellyfin **server plugin** that adds a quality-selection transcoded download option to the
+More menu on item detail pages. Pick a quality tier and Jellyfin transcodes the file to
+H.264/AAC on the fly. Use Jellyfin's built-in Download button to grab the original file.
 
 ## How to download
 
@@ -14,8 +14,9 @@ After installing the plugin, open any **movie or episode detail page** in the Je
 client. Open the **"More" menu** (the `⋯` / kebab menu on the detail page) — a
 **"Download (Transcode…)"** entry appears at the bottom of the list.
 
-Selecting it opens a quality picker. Choose a bitrate tier to transcode on the fly, or
-pick **Original** to grab the unmodified source file.
+Selecting it opens a quality picker. Choose a bitrate tier — Jellyfin transcodes on the fly
+and the plugin downloads the stream with a live progress bar. To grab the original file
+without transcoding, use Jellyfin's own **Download** button that's already in the More menu.
 
 You can queue multiple items: navigate to another movie or episode and add more downloads
 while one is already in progress. Each queued item waits its turn and starts automatically
@@ -23,10 +24,9 @@ when the one ahead of it finishes.
 
 ### What happens in the background
 
-| Mode | What Jellyfin does |
-|---|---|
-| **Transcoded** (e.g. 4 Mbps) | Jellyfin encodes the video server-side to H.264/AAC at the selected bitrate and streams the result. The plugin downloads the stream chunk by chunk, shows a live progress bar with an estimated file size, and saves it as an `.mp4` once complete. |
-| **Original** | A direct download link is opened — no transcoding, no buffering into RAM. The browser saves whatever format Jellyfin has on disk. |
+Jellyfin encodes the video server-side to H.264/AAC at the selected bitrate and streams the
+result. The plugin downloads the stream chunk by chunk, shows a live progress bar with an
+estimated file size, and saves it as an `.mp4` once complete.
 
 The estimated file size shown during a transcoded download is calculated from the selected
 bitrate and the item's runtime (`~size = bitrate × duration ÷ 8`). It carries a `~`
