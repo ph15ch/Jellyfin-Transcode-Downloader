@@ -17,10 +17,190 @@
     ];
 
     let currentItemId = null;
-    let isDownloading = false;
-    let currentAbortController = null;
     let currentItem = null;
     let currentItemPromise = null;
+
+    // --- Download queue ---
+    // Each entry: { id, filename, estimatedBytes, url, abortController, status: 'waiting'|'active' }
+    const downloadQueue = [];
+    let queueProcessing = false;
+
+    function enqueue(entry) {
+        downloadQueue.push(entry);
+        renderQueue();
+        if (!queueProcessing) processQueue();
+    }
+
+    function removeFromQueue(id) {
+        const idx = downloadQueue.findIndex(e => e.id === id);
+        if (idx === -1) return;
+        const entry = downloadQueue[idx];
+        if (entry.status === 'active' && entry.abortController) {
+            entry.abortController.abort();
+        }
+        downloadQueue.splice(idx, 1);
+        renderQueue();
+        // If we cancelled the active item, processQueue will be called by the fetch .finally
+    }
+
+    async function processQueue() {
+        if (queueProcessing) return;
+        if (downloadQueue.length === 0) return;
+
+        queueProcessing = true;
+        while (downloadQueue.length > 0) {
+            const entry = downloadQueue[0];
+            entry.status = 'active';
+            entry.abortController = new AbortController();
+            renderQueue();
+
+            try {
+                const response = await fetch(entry.url, { signal: entry.abortController.signal });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const blob = await readStream(response.body, entry.estimatedBytes, entry);
+                triggerBlobDownload(blob, entry.filename);
+                updateEntryProgress(entry, 1, entry.estimatedBytes);
+                await new Promise(r => setTimeout(r, 1000));
+            } catch (err) {
+                if (err.name !== 'AbortError') {
+                    console.error('[TranscodeDownloader] Download failed:', err);
+                    updateEntryStatus(entry, 'Download failed.');
+                    await new Promise(r => setTimeout(r, 3000));
+                }
+            }
+
+            // Remove this entry (whether done, failed, or aborted)
+            const idx = downloadQueue.indexOf(entry);
+            if (idx !== -1) downloadQueue.splice(idx, 1);
+            renderQueue();
+        }
+        queueProcessing = false;
+    }
+
+    // --- Stream reader ---
+
+    async function readStream(body, estimatedBytes, entry) {
+        const reader = body.getReader();
+        const chunks = [];
+        let received = 0;
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(value);
+            received += value.byteLength;
+            updateEntryProgress(entry, received / estimatedBytes, estimatedBytes, received);
+        }
+
+        return new Blob(chunks, { type: 'video/mp4' });
+    }
+
+    // --- Queue panel UI ---
+
+    function injectQueuePanel() {
+        if (document.getElementById('qd-queue-panel')) return;
+
+        const panel = document.createElement('div');
+        panel.id = 'qd-queue-panel';
+        panel.style.cssText = 'display:none;position:fixed;bottom:16px;right:16px;background:#1a1a1a;border:1px solid #444;border-radius:6px;color:#fff;font-size:13px;min-width:320px;max-width:400px;z-index:9999;font-family:monospace;overflow:hidden;';
+
+        const list = document.createElement('div');
+        list.id = 'qd-queue-list';
+        panel.appendChild(list);
+
+        document.body.appendChild(panel);
+    }
+
+    function renderQueue() {
+        const panel = document.getElementById('qd-queue-panel');
+        const list = document.getElementById('qd-queue-list');
+        if (!panel || !list) return;
+
+        if (downloadQueue.length === 0) {
+            panel.style.display = 'none';
+            return;
+        }
+
+        panel.style.display = 'block';
+        list.innerHTML = '';
+
+        downloadQueue.forEach(entry => {
+            const row = document.createElement('div');
+            row.id = `qd-entry-${entry.id}`;
+            row.style.cssText = 'padding:10px 14px;border-bottom:1px solid #2a2a2a;';
+
+            const top = document.createElement('div');
+            top.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px;';
+
+            const name = document.createElement('div');
+            name.style.cssText = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:bold;';
+            name.textContent = entry.filename;
+
+            const cancelBtn = document.createElement('button');
+            cancelBtn.textContent = '✕';
+            cancelBtn.style.cssText = 'padding:2px 8px;border-radius:4px;border:1px solid #666;background:#333;color:#fff;cursor:pointer;font-size:12px;flex-shrink:0;';
+            cancelBtn.addEventListener('click', () => removeFromQueue(entry.id));
+
+            top.appendChild(name);
+            top.appendChild(cancelBtn);
+            row.appendChild(top);
+
+            if (entry.status === 'active') {
+                const track = document.createElement('div');
+                track.style.cssText = 'height:5px;background:#333;border-radius:3px;margin-bottom:4px;';
+                const fill = document.createElement('div');
+                fill.id = `qd-fill-${entry.id}`;
+                fill.style.cssText = 'height:100%;width:0%;background:#00a4dc;border-radius:3px;transition:width 0.2s;';
+                track.appendChild(fill);
+                row.appendChild(track);
+
+                const status = document.createElement('div');
+                status.id = `qd-status-${entry.id}`;
+                status.style.cssText = 'color:#aaa;font-size:12px;';
+                row.appendChild(status);
+            } else {
+                const waiting = document.createElement('div');
+                waiting.style.cssText = 'color:#666;font-size:12px;';
+                waiting.textContent = 'Waiting…';
+                row.appendChild(waiting);
+            }
+
+            list.appendChild(row);
+        });
+    }
+
+    function updateEntryProgress(entry, ratio, estimatedBytes, receivedBytes) {
+        const fill = document.getElementById(`qd-fill-${entry.id}`);
+        const statusEl = document.getElementById(`qd-status-${entry.id}`);
+        if (!fill || !statusEl) return;
+
+        const pct = Math.min(Math.round(ratio * 100), 100);
+        fill.style.width = pct + '%';
+
+        const receivedMB = receivedBytes != null ? (receivedBytes / 1_048_576).toFixed(1) : null;
+        const estimatedMB = (estimatedBytes / 1_048_576).toFixed(1);
+        statusEl.textContent = receivedMB != null
+            ? `${receivedMB} MB / ~${estimatedMB} MB · ${pct}%`
+            : `~${estimatedMB} MB · ${pct}%`;
+    }
+
+    function updateEntryStatus(entry, text) {
+        const statusEl = document.getElementById(`qd-status-${entry.id}`);
+        if (statusEl) statusEl.textContent = text;
+    }
+
+    function triggerBlobDownload(blob, filename) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    }
+
+    // --- Item metadata ---
 
     function extractItemId(hash) {
         const queryStart = hash.indexOf('?');
@@ -108,13 +288,10 @@
     }
 
     function closeActiveSheet() {
-        // Jellyfin closes the sheet when any item is clicked via its own listener;
-        // nudge it in case our synthetic handler fires before theirs.
         const backdrop = document.querySelector('.actionSheetScrim, .dialogBackdrop, .mdl-overlay');
         if (backdrop) backdrop.click();
     }
 
-    // Watch for Jellyfin's "mehr" menu opening
     const _menuObserver = new MutationObserver(() => {
         const downloadBtn = document.querySelector('.actionSheetMenuItem[data-id="download"]');
         if (downloadBtn) injectMenuItems(downloadBtn);
@@ -126,8 +303,6 @@
     async function showQualitySheet() {
         if (document.getElementById('qd-quality-sheet')) return;
 
-        // Re-derive the item ID from the URL at open time; navigation may have happened
-        // before onHashChange fired, leaving currentItemId pointing at the previous item.
         const liveItemId = extractItemId(window.location.hash);
         if (liveItemId && liveItemId !== currentItemId) {
             currentItem = null;
@@ -157,9 +332,8 @@
         scrim.appendChild(sheet);
         document.body.appendChild(scrim);
 
-        // Wait for metadata so we can filter tiers to valid bitrates only
         const item = currentItem || (currentItemPromise ? await currentItemPromise : null);
-        if (!document.getElementById('qd-quality-sheet')) return; // sheet dismissed while loading
+        if (!document.getElementById('qd-quality-sheet')) return;
 
         loadingEl.remove();
 
@@ -191,11 +365,11 @@
         getApiClient(0, 5, (client) => {
             const token = client.accessToken();
             const baseUrl = client.serverAddress() || window.location.origin;
-            startTranscodeDownload(baseUrl, currentItemId, token, bitrate, maxHeight, currentItem);
+            addToQueue(baseUrl, currentItemId, token, bitrate, maxHeight, currentItem);
         });
     }
 
-    function startTranscodeDownload(baseUrl, itemId, token, selectedBitrate, maxHeight, item) {
+    function addToQueue(baseUrl, itemId, token, selectedBitrate, maxHeight, item) {
         const url = `${baseUrl}/Videos/${itemId}/stream.mp4?MaxStreamingBitrate=${selectedBitrate}&MaxHeight=${maxHeight}&VideoCodec=h264&AudioCodec=aac&MaxAudioChannels=2&allowVideoStreamCopy=false&allowAudioStreamCopy=false&Static=false&api_key=${token}`;
 
         const pad = (n) => String(n).padStart(2, '0');
@@ -211,117 +385,14 @@
         const durationSeconds = item.RunTimeTicks / 10_000_000;
         const estimatedBytes = (selectedBitrate * durationSeconds) / 8;
 
-        isDownloading = true;
-        currentAbortController = new AbortController();
-        showStatusBar(filename);
-
-        fetch(url, { signal: currentAbortController.signal })
-            .then(response => {
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                return readStream(response.body, estimatedBytes);
-            })
-            .then(blob => {
-                triggerBlobDownload(blob, filename);
-                updateProgress(1, estimatedBytes);
-                setTimeout(hideStatusBar, 1000);
-            })
-            .catch(err => {
-                if (err.name !== 'AbortError') {
-                    console.error('[TranscodeDownloader] Download failed:', err);
-                    setStatusText('Download failed.');
-                    setTimeout(hideStatusBar, 3000);
-                }
-            })
-            .finally(() => {
-                isDownloading = false;
-                currentAbortController = null;
-            });
-    }
-
-    async function readStream(body, estimatedBytes) {
-        const reader = body.getReader();
-        const chunks = [];
-        let received = 0;
-
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            chunks.push(value);
-            received += value.byteLength;
-            updateProgress(received / estimatedBytes, estimatedBytes, received);
-        }
-
-        return new Blob(chunks, { type: 'video/mp4' });
-    }
-
-    function updateProgress(ratio, estimatedBytes, receivedBytes) {
-        const pct = Math.min(Math.round(ratio * 100), 100);
-        const fill = document.getElementById('qd-status-bar-fill');
-        if (fill) fill.style.width = pct + '%';
-
-        const receivedMB = receivedBytes != null ? (receivedBytes / 1_048_576).toFixed(1) : null;
-        const estimatedMB = (estimatedBytes / 1_048_576).toFixed(1);
-        const text = receivedMB != null
-            ? `${receivedMB} MB / ~${estimatedMB} MB · ${pct}%`
-            : `~${estimatedMB} MB · ${pct}%`;
-        setStatusText(text);
-    }
-
-    function triggerBlobDownload(blob, filename) {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        setTimeout(() => URL.revokeObjectURL(url), 60_000);
-    }
-
-    function showStatusBar(filename) {
-        const bar = document.getElementById('qd-status-bar');
-        if (!bar) return;
-        document.getElementById('qd-status-filename').textContent = filename;
-        document.getElementById('qd-status-bar-fill').style.width = '0%';
-        setStatusText('');
-        bar.style.display = 'block';
-    }
-
-    function hideStatusBar() {
-        const bar = document.getElementById('qd-status-bar');
-        if (bar) bar.style.display = 'none';
-    }
-
-    function setStatusText(text) {
-        const el = document.getElementById('qd-status-text');
-        if (el) el.textContent = text;
-    }
-
-    function cancelDownload() {
-        if (currentAbortController) currentAbortController.abort();
-        isDownloading = false;
-        currentAbortController = null;
-        hideStatusBar();
-    }
-
-    function injectStatusBar() {
-        if (document.getElementById('qd-status-bar')) return;
-
-        const bar = document.createElement('div');
-        bar.id = 'qd-status-bar';
-        bar.style.cssText = 'display:none;position:fixed;bottom:16px;right:16px;background:#1a1a1a;border:1px solid #444;border-radius:6px;padding:12px 16px;color:#fff;font-size:13px;min-width:300px;z-index:9999;font-family:monospace;';
-
-        bar.innerHTML = `
-        <div id="qd-status-filename" style="margin-bottom:6px;font-weight:bold;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:280px;"></div>
-        <div id="qd-status-bar-track" style="height:6px;background:#333;border-radius:3px;margin-bottom:6px;">
-            <div id="qd-status-bar-fill" style="height:100%;width:0%;background:#00a4dc;border-radius:3px;transition:width 0.2s;"></div>
-        </div>
-        <div id="qd-status-text" style="margin-bottom:8px;"></div>
-        <button id="qd-cancel-btn" style="padding:4px 10px;border-radius:4px;border:1px solid #666;background:#333;color:#fff;cursor:pointer;font-size:12px;">✕ Cancel</button>
-    `;
-
-        document.body.appendChild(bar);
-        document.getElementById('qd-cancel-btn').addEventListener('click', cancelDownload);
+        enqueue({
+            id: `${itemId}-${Date.now()}`,
+            filename,
+            estimatedBytes,
+            url,
+            abortController: null,
+            status: 'waiting',
+        });
     }
 
     console.log('[TranscodeDownloader] plugin loaded');
@@ -331,5 +402,5 @@
         onHashChange();
     }
 
-    injectStatusBar();
+    injectQueuePanel();
 })();

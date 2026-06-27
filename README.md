@@ -15,6 +15,10 @@ client. Open the **"More" menu** (the `⋯` / kebab menu on the detail page) —
 Selecting it opens a quality picker. Choose a bitrate tier to transcode on the fly, or
 pick **Original** to grab the unmodified source file.
 
+You can queue multiple items: navigate to another movie or episode and add more downloads
+while one is already in progress. Each queued item waits its turn and starts automatically
+when the one ahead of it finishes.
+
 ### What happens in the background
 
 | Mode | What Jellyfin does |
@@ -23,8 +27,17 @@ pick **Original** to grab the unmodified source file.
 | **Original** | A direct download link is opened — no transcoding, no buffering into RAM. The browser saves whatever format Jellyfin has on disk. |
 
 The estimated file size shown during a transcoded download is calculated from the selected
-bitrate and the item's runtime (`~size = (bitrate + 128 kbps audio) × duration ÷ 8`). It
-carries a `~` prefix because VBR encoding means the real size can vary by ±10–15%.
+bitrate and the item's runtime (`~size = bitrate × duration ÷ 8`). It carries a `~`
+prefix because VBR encoding means the real size can vary by ±10–15%.
+
+### Download queue
+
+A panel in the bottom-right corner shows all queued downloads. The active item displays a
+progress bar; items waiting to start show "Waiting…". Each item has its own **✕** cancel
+button — cancelling removes only that item and the next one starts automatically. The panel
+disappears when the queue is empty.
+
+The queue is in-memory only: closing or reloading the browser tab clears it.
 
 Cancelling mid-download aborts the in-progress request cleanly; no partial file is saved.
 

@@ -87,6 +87,13 @@ The `?v=` query is the plugin assembly version, set at release time via
 - **UI injection:** `.mainDetailButtons` / `.detailButtons` (fallback chain), with a retry
   loop. Prints `[QuickDownload] plugin loaded` to the console on success.
 
+## README maintenance
+
+Update `README.md` whenever a change affects user-visible behaviour: new features, changed
+UX flows, new requirements, or removed capabilities. The README is the end-user reference;
+keep it in sync with `plugin.js` and the C# plugin. Do **not** update it for
+refactors, internal-only changes, or build/tooling fixes.
+
 ## Release pipeline
 
 Tag-driven (`.github/workflows/release.yml`): an annotated tag `vX.Y.Z` is the single
