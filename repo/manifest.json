@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/ph15ch/Jellyfin-Transcode-Downloader/main/logo.png",
     "versions": [
       {
+        "version": "1.0.21.0",
+        "changelog": "Add multi-download queue\n\nDownloads now enqueue instead of starting immediately. Each queued item has its own cancel button; cancelling removes only that item and the next starts automatically. The bottom-right panel shows all queued items with live progress for the active one. Queue is in-memory only.",
+        "targetAbi": "10.11.8.0",
+        "sourceUrl": "https://github.com/ph15ch/Jellyfin-Transcode-Downloader/releases/download/v1.0.21/jellyfin-transcode-downloader_1.0.21.zip",
+        "checksum": "a195639fceed3f3aee930d12b7782592",
+        "timestamp": "2026-06-27T10:46:07Z"
+      },
+      {
         "version": "1.0.20.0",
         "changelog": "Update logo, rename console prefix to [TranscodeDownloader], fix README and manifest",
         "targetAbi": "10.11.8.0",
