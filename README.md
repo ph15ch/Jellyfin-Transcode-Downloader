@@ -8,6 +8,8 @@ straight from the movie/episode page.
 
 ## How to download
 
+![Demo](demo/jellyfin-demo.gif)
+
 After installing the plugin, open any **movie or episode detail page** in the Jellyfin web
 client. Open the **"More" menu** (the `⋯` / kebab menu on the detail page) — a
 **"Download (Transcode…)"** entry appears at the bottom of the list.

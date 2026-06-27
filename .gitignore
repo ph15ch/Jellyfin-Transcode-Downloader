@@ -1,3 +1,4 @@
 src/bin/
 src/obj/
 *.user
+demo/__pycache__/
