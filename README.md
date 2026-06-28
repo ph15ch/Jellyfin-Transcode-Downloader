@@ -2,6 +2,7 @@
 
 ![Transcode Downloader](logo.png)
 ![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/ph15ch/Jellyfin-Transcode-Downloader/total)
+
 A Jellyfin **server plugin** that adds a quality-selection transcoded download option to the
 More menu on item detail pages. Pick a quality tier and Jellyfin transcodes the file to
 H.264/AAC on the fly. Use Jellyfin's built-in Download button to grab the original file.
