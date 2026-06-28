@@ -1,3 +1,4 @@
+![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/ph15ch/Jellyfin-Transcode-Downloader/total)
 # Jellyfin Transcode Downloader
 
 ![Transcode Downloader](logo.png)
