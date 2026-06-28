@@ -5,6 +5,9 @@
 A Jellyfin **server plugin** that adds a quality-selection transcoded download option to the
 More menu on item detail pages. Pick a quality tier and Jellyfin transcodes the file to
 H.264/AAC on the fly. Use Jellyfin's built-in Download button to grab the original file.
+## My other projects
+- [PackShare](https://packshare.de) is a tool to plan your festival with your friends. One source of truth: what do we need, who buys it and who brings it. Includes a planning, buying and packing tool.
+- [Easy Intervals MCP](https://easy-intervals.de) is a MCP Server for www.intervals.icu. This helps you to connect your favorite LLM to your health, fitness and trainings data. 
 
 ## How to download
 
