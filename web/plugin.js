@@ -509,4 +509,16 @@
 
     injectQueuePanel();
     initStrings();
+
+    // Re-fetch strings whenever Jellyfin changes the UI language (updates document.documentElement.lang).
+    new MutationObserver(() => {
+        const locale = document.documentElement.lang;
+        if (!locale) return;
+        fetchStrings(locale).then(result => {
+            if (result) {
+                loadedStrings = result.strings;
+                console.log('[TranscodeDownloader] strings reloaded for locale:', locale);
+            }
+        }).catch(() => {});
+    }).observe(document.documentElement, { attributes: true, attributeFilter: ['lang'] });
 })();
