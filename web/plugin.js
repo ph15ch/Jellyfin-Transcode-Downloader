@@ -78,16 +78,6 @@
     // Eagerly load strings; resolves once registered (or immediately if globalize unavailable)
     let stringsPromise = null;
 
-    function getActiveLocale(uiCulture) {
-        // Jellyfin's own globalize reflects the actual active UI language; prefer it.
-        if (window.globalize && typeof window.globalize.getCurrentLocale === 'function') {
-            const loc = window.globalize.getCurrentLocale();
-            if (loc) return loc;
-        }
-        // UICulture is empty string when the user has selected the default (English).
-        return uiCulture || 'en-us';
-    }
-
     function initStrings() {
         stringsPromise = new Promise((resolve) => {
             // Wait for ApiClient to be ready to read UICulture, but don't block indefinitely
@@ -95,13 +85,16 @@
                 const client = window.ApiClient;
                 if (client && client.getCurrentUserId && client.accessToken) {
                     client.getCurrentUser().then(user => {
-                        const uiCulture = user && user.Configuration && user.Configuration.UICulture;
-                        loadStringsForLocale(getActiveLocale(uiCulture), resolve);
-                    }).catch(() => loadStringsForLocale(getActiveLocale(null), resolve));
+                        // UICulture is an empty string when Jellyfin's default (English) is selected.
+                        // Fall back to en-us rather than navigator.language so the plugin language
+                        // matches the Jellyfin UI language instead of the browser's OS language.
+                        const locale = (user && user.Configuration && user.Configuration.UICulture) || 'en-us';
+                        loadStringsForLocale(locale, resolve);
+                    }).catch(() => loadStringsForLocale('en-us', resolve));
                 } else if (attempt < 10) {
                     setTimeout(() => tryLoad(attempt + 1), 500);
                 } else {
-                    loadStringsForLocale(getActiveLocale(null), resolve);
+                    loadStringsForLocale('en-us', resolve);
                 }
             }
             tryLoad(0);
