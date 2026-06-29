@@ -77,14 +77,10 @@
 
     function initStrings() {
         stringsPromise = new Promise((resolve) => {
-            // Poll until window.globalize is ready, then read its current locale.
-            // globalize.getCurrentLocale() returns the normalized locale Jellyfin is
-            // actually using (e.g. 'de', 'fr', 'en-us'), which is the reliable source
-            // of truth — no API call required.
             function tryLoad(attempt) {
-                const locale = window.globalize && window.globalize.getCurrentLocale
-                    ? window.globalize.getCurrentLocale()
-                    : null;
+                // globalize sets document.documentElement.lang to the normalized locale
+                // (e.g. 'de', 'en-us') during its module init — before any deferred script runs.
+                const locale = document.documentElement.lang || null;
                 if (locale) {
                     fetchStrings(locale).then(result => {
                         if (result) loadedStrings = result.strings;
@@ -94,7 +90,7 @@
                 } else if (attempt < 20) {
                     setTimeout(() => tryLoad(attempt + 1), 250);
                 } else {
-                    console.warn('[TranscodeDownloader] globalize not available, using fallback strings');
+                    console.warn('[TranscodeDownloader] locale not detected, using fallback strings');
                     resolve();
                 }
             }
