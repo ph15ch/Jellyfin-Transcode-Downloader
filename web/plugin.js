@@ -1,5 +1,4 @@
 (() => {
-    const PLUGIN_ID = 'transcode-downloader';
     const SUPPORTED_LOCALES = ['en-us', 'de', 'fr', 'es', 'zh-cn', 'nl'];
 
     const QUALITY_TIERS = [
@@ -21,7 +20,7 @@
 
     // --- i18n ---
 
-    // Fallback strings used if globalize is unavailable or strings fetch fails.
+    // Fallback strings used when strings fetch fails or locale is en-us.
     const FALLBACK_STRINGS = {
         ChooseQuality: 'Choose quality',
         LoadingMediaInfo: 'Loading media info…',
@@ -31,13 +30,11 @@
         DownloadFailed: 'Download failed.',
     };
 
-    let stringsReady = false;
+    // Populated by initStrings(); null until loaded.
+    let loadedStrings = null;
 
     function t(key) {
-        if (stringsReady && window.globalize) {
-            const val = window.globalize.translate(key + '#' + PLUGIN_ID);
-            if (val && val !== key + '#' + PLUGIN_ID) return val;
-        }
+        if (loadedStrings && loadedStrings[key]) return loadedStrings[key];
         return FALLBACK_STRINGS[key] || key;
     }
 
@@ -75,47 +72,34 @@
         return null;
     }
 
-    // Eagerly load strings; resolves once registered (or immediately if globalize unavailable)
+    // Eagerly load strings; resolves once loaded (or on failure).
     let stringsPromise = null;
 
     function initStrings() {
         stringsPromise = new Promise((resolve) => {
-            // Wait for ApiClient to be ready to read UICulture, but don't block indefinitely
+            // Poll until window.globalize is ready, then read its current locale.
+            // globalize.getCurrentLocale() returns the normalized locale Jellyfin is
+            // actually using (e.g. 'de', 'fr', 'en-us'), which is the reliable source
+            // of truth — no API call required.
             function tryLoad(attempt) {
-                const client = window.ApiClient;
-                if (client && client.getCurrentUserId && client.accessToken) {
-                    client.getCurrentUser().then(user => {
-                        // UICulture is an empty string when Jellyfin's default (English) is selected.
-                        // Fall back to en-us rather than navigator.language so the plugin language
-                        // matches the Jellyfin UI language instead of the browser's OS language.
-                        const locale = (user && user.Configuration && user.Configuration.UICulture) || 'en-us';
-                        loadStringsForLocale(locale, resolve);
-                    }).catch(() => loadStringsForLocale('en-us', resolve));
-                } else if (attempt < 10) {
-                    setTimeout(() => tryLoad(attempt + 1), 500);
+                const locale = window.globalize && window.globalize.getCurrentLocale
+                    ? window.globalize.getCurrentLocale()
+                    : null;
+                if (locale) {
+                    fetchStrings(locale).then(result => {
+                        if (result) loadedStrings = result.strings;
+                        console.log('[TranscodeDownloader] strings loaded for locale:', locale);
+                        resolve();
+                    }).catch(() => resolve());
+                } else if (attempt < 20) {
+                    setTimeout(() => tryLoad(attempt + 1), 250);
                 } else {
-                    loadStringsForLocale('en-us', resolve);
+                    console.warn('[TranscodeDownloader] globalize not available, using fallback strings');
+                    resolve();
                 }
             }
             tryLoad(0);
         });
-    }
-
-    function loadStringsForLocale(locale, resolve) {
-        fetchStrings(locale).then(result => {
-            if (result && window.globalize) {
-                try {
-                    window.globalize.loadStrings({
-                        name: PLUGIN_ID,
-                        strings: [{ lang: result.lang, strings: result.strings }]
-                    });
-                    stringsReady = true;
-                } catch (err) {
-                    console.warn('[TranscodeDownloader] globalize.loadStrings failed:', err);
-                }
-            }
-            resolve();
-        }).catch(() => resolve());
     }
 
     // --- Download queue ---
