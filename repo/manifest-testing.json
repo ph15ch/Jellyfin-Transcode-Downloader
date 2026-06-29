@@ -6,7 +6,7 @@
     "description": "TEST BUILDS ONLY — Adds a quality-selection download button to Jellyfin item detail pages.",
     "overview": "Test/pre-release builds. Not for production use. Adds a 'Download (Transcode…)' entry to the More menu on every movie and episode detail page.",
     "owner": "ph15ch",
-    "imageUrl": "https://raw.githubusercontent.com/ph15ch/Jellyfin-Transcode-Downloader/main/logo.png",
+    "imageUrl": "https://raw.githubusercontent.com/ph15ch/Jellyfin-Transcode-Downloader/main/logo-beta.png",
     "versions": []
   }
 ]
