@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/ph15ch/Jellyfin-Transcode-Downloader/main/logo-beta.png",
     "versions": [
       {
+        "version": "1.0.22.2",
+        "changelog": "Fix language setting not respected — always showed German strings",
+        "targetAbi": "10.11.8.0",
+        "sourceUrl": "https://github.com/ph15ch/Jellyfin-Transcode-Downloader/releases/download/test/v1.0.22.2/jellyfin-transcode-downloader_1.0.22.2-test.zip",
+        "checksum": "f7838a7a2f01a3d15318266bcc3092d1",
+        "timestamp": "2026-06-29T19:55:11Z"
+      },
+      {
         "version": "1.0.22.1",
         "changelog": "Initial test release",
         "targetAbi": "10.11.8.0",
