@@ -7,6 +7,15 @@
     "overview": "Test/pre-release builds. Not for production use. Adds a 'Download (Transcode…)' entry to the More menu on every movie and episode detail page.",
     "owner": "ph15ch",
     "imageUrl": "https://raw.githubusercontent.com/ph15ch/Jellyfin-Transcode-Downloader/main/logo-beta.png",
-    "versions": []
+    "versions": [
+      {
+        "version": "1.0.22.1.0",
+        "changelog": "Initial test release",
+        "targetAbi": "10.11.8.0",
+        "sourceUrl": "https://github.com/ph15ch/Jellyfin-Transcode-Downloader/releases/download/test/v1.0.22.1/jellyfin-transcode-downloader_1.0.22.1-test.zip",
+        "checksum": "0bbeeb98e0ec1a7aad89ea5758f321a6",
+        "timestamp": "2026-06-29T19:32:23Z"
+      }
+    ]
   }
 ]
