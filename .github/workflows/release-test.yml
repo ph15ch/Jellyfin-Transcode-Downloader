@@ -1,13 +1,14 @@
 name: Release (Testing)
 
 # Test/pre-release pipeline. Mirrors release.yml but:
-#   - Triggered by tags matching `test/v*.*.*` (e.g. `test/v1.2.3`)
+#   - Triggered by tags matching `test/vX.Y.Z.A` (4-component, e.g. `test/v1.0.22.1`)
+#   - Test versions track the corresponding release: 1.0.22.x leads up to release 1.0.23.0
 #   - Writes to repo/manifest-testing.json, NOT repo/manifest.json
 #   - Creates a GitHub pre-release (marked as pre-release in the UI)
 #
 # Usage:
-#   git tag -a test/v1.2.3 -m "What changed"
-#   git push origin test/v1.2.3
+#   git tag -a test/v1.0.22.1 -m "What changed"
+#   git push origin test/v1.0.22.1
 #
 # Point your test Jellyfin instance at:
 #   https://raw.githubusercontent.com/ph15ch/Jellyfin-Transcode-Downloader/main/repo/manifest-testing.json
@@ -15,7 +16,7 @@ name: Release (Testing)
 on:
   push:
     tags:
-      - 'test/v*.*.*'
+      - 'test/v*.*.*.*'
 
 permissions:
   contents: write
@@ -48,13 +49,18 @@ jobs:
 
           git fetch --force origin "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
 
-          # Strip the `test/v` prefix to get the bare semver.
+          # Strip the `test/v` prefix to get the bare version (must be X.Y.Z.A).
           VERSION="${GITHUB_REF_NAME#test/v}"
           echo "Releasing test version: ${VERSION}"
 
+          if ! [[ "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Tag version '${VERSION}' must be X.Y.Z.A (4 components). Use: git tag -a test/v1.0.22.1 -m 'changelog'" >&2
+            exit 1
+          fi
+
           TAG_TYPE="$(git cat-file -t "${GITHUB_REF_NAME}")"
           if [ "${TAG_TYPE}" != "tag" ]; then
-            echo "::error::Tag '${GITHUB_REF_NAME}' is not an annotated tag (object type: ${TAG_TYPE}). Use: git tag -a test/v1.2.3 -m 'changelog'" >&2
+            echo "::error::Tag '${GITHUB_REF_NAME}' is not an annotated tag (object type: ${TAG_TYPE}). Use: git tag -a test/v1.0.22.1 -m 'changelog'" >&2
             exit 1
           fi
 
@@ -124,7 +130,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          FULL_VERSION="${VERSION}.0"
+          FULL_VERSION="${VERSION}"
           SOURCE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/${ZIP_NAME}"
           TIMESTAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 

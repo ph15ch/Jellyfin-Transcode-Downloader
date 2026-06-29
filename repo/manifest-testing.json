@@ -9,7 +9,7 @@
     "imageUrl": "https://raw.githubusercontent.com/ph15ch/Jellyfin-Transcode-Downloader/main/logo-beta.png",
     "versions": [
       {
-        "version": "1.0.22.1.0",
+        "version": "1.0.22.1",
         "changelog": "Initial test release",
         "targetAbi": "10.11.8.0",
         "sourceUrl": "https://github.com/ph15ch/Jellyfin-Transcode-Downloader/releases/download/test/v1.0.22.1/jellyfin-transcode-downloader_1.0.22.1-test.zip",
