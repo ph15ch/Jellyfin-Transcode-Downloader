@@ -94,10 +94,32 @@ refactors, internal-only changes, or build/tooling fixes.
 
 ## Release pipeline
 
-Tag-driven (`.github/workflows/release.yml`): an annotated tag `vX.Y.Z` is the single
-source of truth. The tag message is the changelog. The pipeline builds with
-`dotnet publish -p:Version=$VERSION`, zips the DLL, creates a GitHub release, and prepends
-a manifest entry to `repo/manifest.json` on `main`. `targetAbi` and the SDK package
+Two tag-driven pipelines run independently:
+
+| Tag pattern | Workflow | Manifest | GitHub release |
+|---|---|---|---|
+| `vX.Y.Z` | `release.yml` | `repo/manifest.json` | Full release |
+| `test/vX.Y.Z` | `release-test.yml` | `repo/manifest-testing.json` | Pre-release |
+
+Both require an **annotated** tag whose message is the changelog.
+
+**Production release:**
+```
+git tag -a v1.2.3 -m "What changed"
+git push origin v1.2.3
+```
+
+**Test release** (won't affect production users):
+```
+git tag -a test/v1.2.3 -m "What changed"
+git push origin test/v1.2.3
+```
+
+Point a test Jellyfin instance at `repo/manifest-testing.json` (raw GitHub URL on `main`).
+Production users point at `repo/manifest.json`. The two manifests are never cross-written.
+
+The pipeline builds with `dotnet publish -p:Version=$VERSION`, zips the DLL, creates a
+GitHub release, and prepends a manifest entry on `main`. `targetAbi` and the SDK package
 versions are kept in lockstep (currently **10.11.8** / ABI **10.11.8.0**). Do not hand-edit
 manifest version entries.
 
