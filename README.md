@@ -130,17 +130,22 @@ Releases are fully tag-driven — no manual edits to the manifest or workflow in
 
 ### Test release
 
-Use the `test/vX.Y.Z` tag prefix. This triggers a separate workflow that writes **only**
-to `repo/manifest-testing.json` and marks the GitHub release as a pre-release.
-The production `repo/manifest.json` is never touched.
+Use the `test/vX.Y.Z.N` tag prefix (note the **4-component version**). This triggers a
+separate workflow that writes **only** to `repo/manifest-testing.json` and marks the
+GitHub release as a pre-release. The production `repo/manifest.json` is never touched.
 
 ```
-git tag -a test/v1.2.3 -m "Short description of what changed"
-git push origin test/v1.2.3
+git tag -a test/v1.2.3.1 -m "Short description of what changed"
+git push origin test/v1.2.3.1
 ```
+
+The first three components (`X.Y.Z`) match the upcoming production release; `N` is an
+iteration counter starting at 1. For example, test builds leading up to `v1.0.23` would
+be `test/v1.0.23.1`, `test/v1.0.23.2`, etc. The workflow enforces 4 components and
+rejects 3-component tags.
 
 The `Release (Testing)` workflow runs identically to the production one, except:
-- The zip is named `jellyfin-transcode-downloader_1.2.3-test.zip`
+- The zip is named `jellyfin-transcode-downloader_1.2.3.1-test.zip`
 - The manifest entry goes into `repo/manifest-testing.json`
 - The GitHub release is marked as a pre-release
 

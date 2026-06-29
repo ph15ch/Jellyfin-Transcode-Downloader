@@ -99,7 +99,7 @@ Two tag-driven pipelines run independently:
 | Tag pattern | Workflow | Manifest | GitHub release |
 |---|---|---|---|
 | `vX.Y.Z` | `release.yml` | `repo/manifest.json` | Full release |
-| `test/vX.Y.Z` | `release-test.yml` | `repo/manifest-testing.json` | Pre-release |
+| `test/vX.Y.Z.N` | `release-test.yml` | `repo/manifest-testing.json` | Pre-release |
 
 Both require an **annotated** tag whose message is the changelog.
 
@@ -111,9 +111,14 @@ git push origin v1.2.3
 
 **Test release** (won't affect production users):
 ```
-git tag -a test/v1.2.3 -m "What changed"
-git push origin test/v1.2.3
+git tag -a test/v1.2.3.1 -m "What changed"
+git push origin test/v1.2.3.1
 ```
+
+Test versions use **4 components** (`X.Y.Z.N`). The first three match the upcoming
+production release; `N` is an iteration counter starting at 1. For example, test builds
+leading up to `v1.0.23` are tagged `test/v1.0.23.1`, `test/v1.0.23.2`, etc.
+The workflow enforces the 4-component format and will hard-fail on a 3-component tag.
 
 Point a test Jellyfin instance at `repo/manifest-testing.json` (raw GitHub URL on `main`).
 Production users point at `repo/manifest.json`. The two manifests are never cross-written.
