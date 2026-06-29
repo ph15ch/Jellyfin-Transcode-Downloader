@@ -75,12 +75,28 @@ Jellyfin web updates.
 
 ## Installing Transcode Downloader
 
+### Production (stable releases)
+
 1. Add this plugin's repository URL under **Dashboard → Plugins → Repositories**:
    ```
    https://raw.githubusercontent.com/ph15ch/Jellyfin-Transcode-Downloader/main/repo/manifest.json
    ```
 2. Install **Transcode Downloader** from the catalog.
 3. Restart Jellyfin.
+
+### Testing (pre-release builds)
+
+To follow test/pre-release builds, use the testing manifest instead:
+
+1. Add the **testing** repository URL under **Dashboard → Plugins → Repositories**:
+   ```
+   https://raw.githubusercontent.com/ph15ch/Jellyfin-Transcode-Downloader/main/repo/manifest-testing.json
+   ```
+2. Install **Transcode Downloader** from the catalog.
+3. Restart Jellyfin.
+
+> Test builds may be unstable. They are marked as pre-releases on GitHub and only appear in
+> the testing manifest — users on the production manifest are never affected.
 
 After restart, open a movie or episode detail page and open the More menu — **"Download (Transcode…)"** appears in the list. (`[TranscodeDownloader] plugin loaded` prints in the browser console.)
 
@@ -97,6 +113,8 @@ script is an embedded resource).
 
 Releases are fully tag-driven — no manual edits to the manifest or workflow inputs needed.
 
+### Production release
+
 1. **Write the changelog** as the message of an annotated git tag:
    ```
    git tag -a v1.2.3 -m "Short description of what changed"
@@ -105,13 +123,26 @@ Releases are fully tag-driven — no manual edits to the manifest or workflow in
 
 2. **The `Release` workflow fires automatically** and:
    - Validates the tag is annotated (lightweight tags are rejected)
-   - Builds with `dotnet publish -p:Version=1.2.3` (drives the assembly version and the
-     JS cache-bust `?v=` query)
-   - Zips `Jellyfin.Plugin.TranscodeDownloader.dll` → `jellyfin-transcode-downloader_1.2.3.zip`
-   - Computes the MD5 checksum
-   - Switches to `main`, prepends a new version entry to `repo/manifest.json`, commits,
-     and pushes (rebasing to survive concurrent runs)
-   - Creates a GitHub release named `Transcode Downloader 1.2.3` and uploads the zip
+   - Builds with `dotnet publish -p:Version=1.2.3`
+   - Zips the DLL → `jellyfin-transcode-downloader_1.2.3.zip`
+   - Prepends a new version entry to `repo/manifest.json` on `main`
+   - Creates a GitHub release and uploads the zip
 
-> **Versions are immutable** — pushing a tag whose version already exists in the manifest
-> will hard-fail the workflow. Cut a new tag to re-release.
+### Test release
+
+Use the `test/vX.Y.Z` tag prefix. This triggers a separate workflow that writes **only**
+to `repo/manifest-testing.json` and marks the GitHub release as a pre-release.
+The production `repo/manifest.json` is never touched.
+
+```
+git tag -a test/v1.2.3 -m "Short description of what changed"
+git push origin test/v1.2.3
+```
+
+The `Release (Testing)` workflow runs identically to the production one, except:
+- The zip is named `jellyfin-transcode-downloader_1.2.3-test.zip`
+- The manifest entry goes into `repo/manifest-testing.json`
+- The GitHub release is marked as a pre-release
+
+> **Versions are immutable within each manifest** — pushing a tag whose version already
+> exists in the target manifest will hard-fail the workflow. Cut a new tag to re-release.
