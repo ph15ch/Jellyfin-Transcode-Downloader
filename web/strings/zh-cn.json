@@ -1,0 +1,8 @@
+{
+    "ChooseQuality": "选择画质",
+    "LoadingMediaInfo": "正在加载媒体信息…",
+    "NoTranscodeOptions": "没有可用的转码选项。",
+    "Waiting": "等待中…",
+    "DownloadTranscode": "下载（转码…）",
+    "DownloadFailed": "下载失败。"
+}

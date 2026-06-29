@@ -28,11 +28,29 @@
     <PackageReference Include="Newtonsoft.Json" Version="13.0.1" PrivateAssets="All" />
   </ItemGroup>
 
-  <!-- The client script is embedded and served by TranscodeDownloaderController; it is
-       never written to disk, so nothing is copied to the build output's web/ folder. -->
+  <!-- The client script and string bundles are embedded and served by
+       TranscodeDownloaderController; nothing is written to disk. -->
   <ItemGroup>
     <EmbeddedResource Include="..\web\plugin.js">
       <LogicalName>Jellyfin.Plugin.TranscodeDownloader.web.plugin.js</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\web\strings\en-us.json">
+      <LogicalName>Jellyfin.Plugin.TranscodeDownloader.web.strings.en-us.json</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\web\strings\de.json">
+      <LogicalName>Jellyfin.Plugin.TranscodeDownloader.web.strings.de.json</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\web\strings\fr.json">
+      <LogicalName>Jellyfin.Plugin.TranscodeDownloader.web.strings.fr.json</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\web\strings\es.json">
+      <LogicalName>Jellyfin.Plugin.TranscodeDownloader.web.strings.es.json</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\web\strings\zh-cn.json">
+      <LogicalName>Jellyfin.Plugin.TranscodeDownloader.web.strings.zh-cn.json</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\web\strings\nl.json">
+      <LogicalName>Jellyfin.Plugin.TranscodeDownloader.web.strings.nl.json</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
 

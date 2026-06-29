@@ -1,0 +1,8 @@
+{
+    "ChooseQuality": "Elegir calidad",
+    "LoadingMediaInfo": "Cargando información del medio…",
+    "NoTranscodeOptions": "No hay opciones de transcodificación disponibles.",
+    "Waiting": "Esperando…",
+    "DownloadTranscode": "Descargar (Transcodificar…)",
+    "DownloadFailed": "Error en la descarga."
+}

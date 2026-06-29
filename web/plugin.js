@@ -1,4 +1,7 @@
 (() => {
+    const PLUGIN_ID = 'transcode-downloader';
+    const SUPPORTED_LOCALES = ['en-us', 'de', 'fr', 'es', 'zh-cn', 'nl'];
+
     const QUALITY_TIERS = [
         { label: '2160p · 120 Mbps', bitrate: 120_000_000, maxHeight: 2160 },
         { label: '2160p · 80 Mbps',  bitrate:  80_000_000, maxHeight: 2160 },
@@ -16,9 +19,103 @@
         { label: '360p · 420 kbps',  bitrate:     420_000, maxHeight:  360 },
     ];
 
-    let currentItemId = null;
-    let currentItem = null;
-    let currentItemPromise = null;
+    // --- i18n ---
+
+    // Fallback strings used if globalize is unavailable or strings fetch fails.
+    const FALLBACK_STRINGS = {
+        ChooseQuality: 'Choose quality',
+        LoadingMediaInfo: 'Loading media info…',
+        NoTranscodeOptions: 'No transcode options available.',
+        Waiting: 'Waiting…',
+        DownloadTranscode: 'Download (Transcode…)',
+        DownloadFailed: 'Download failed.',
+    };
+
+    let stringsReady = false;
+
+    function t(key) {
+        if (stringsReady && window.globalize) {
+            const val = window.globalize.translate(key + '#' + PLUGIN_ID);
+            if (val && val !== key + '#' + PLUGIN_ID) return val;
+        }
+        return FALLBACK_STRINGS[key] || key;
+    }
+
+    // Resolve locale → candidate list with fallback chain: exact → base → en-us
+    function resolveLocaleCandidates(locale) {
+        const lower = (locale || '').toLowerCase().replace('_', '-');
+        const base = lower.split('-')[0];
+        const candidates = [];
+        if (SUPPORTED_LOCALES.includes(lower)) candidates.push(lower);
+        if (base !== lower && SUPPORTED_LOCALES.includes(base)) candidates.push(base);
+        if (!candidates.includes('en-us')) candidates.push('en-us');
+        return candidates;
+    }
+
+    async function fetchStrings(locale) {
+        const candidates = resolveLocaleCandidates(locale);
+        const base = document.querySelector('script[src*="TranscodeDownloader/ClientScript"]');
+        const origin = base
+            ? new URL(base.src).origin
+            : window.location.origin;
+        const basePath = base
+            ? new URL(base.src).pathname.replace('/TranscodeDownloader/ClientScript', '')
+            : '';
+
+        for (const candidate of candidates) {
+            try {
+                const res = await fetch(`${origin}${basePath}/TranscodeDownloader/strings/${candidate}.json`);
+                if (!res.ok) continue;
+                const strings = await res.json();
+                return { lang: candidate, strings };
+            } catch (_) {
+                // try next candidate
+            }
+        }
+        return null;
+    }
+
+    // Eagerly load strings; resolves once registered (or immediately if globalize unavailable)
+    let stringsPromise = null;
+
+    function initStrings() {
+        stringsPromise = new Promise((resolve) => {
+            // Wait for ApiClient to be ready to read UICulture, but don't block indefinitely
+            function tryLoad(attempt) {
+                const client = window.ApiClient;
+                if (client && client.getCurrentUserId && client.accessToken) {
+                    client.getCurrentUser().then(user => {
+                        const locale = user && user.Configuration && user.Configuration.UICulture
+                            ? user.Configuration.UICulture
+                            : navigator.language;
+                        loadStringsForLocale(locale, resolve);
+                    }).catch(() => loadStringsForLocale(navigator.language, resolve));
+                } else if (attempt < 10) {
+                    setTimeout(() => tryLoad(attempt + 1), 500);
+                } else {
+                    loadStringsForLocale(navigator.language, resolve);
+                }
+            }
+            tryLoad(0);
+        });
+    }
+
+    function loadStringsForLocale(locale, resolve) {
+        fetchStrings(locale).then(result => {
+            if (result && window.globalize) {
+                try {
+                    window.globalize.loadStrings({
+                        name: PLUGIN_ID,
+                        strings: [{ lang: result.lang, strings: result.strings }]
+                    });
+                    stringsReady = true;
+                } catch (err) {
+                    console.warn('[TranscodeDownloader] globalize.loadStrings failed:', err);
+                }
+            }
+            resolve();
+        }).catch(() => resolve());
+    }
 
     // --- Download queue ---
     // Each entry: { id, filename, estimatedBytes, url, abortController, status: 'waiting'|'active' }
@@ -64,7 +161,7 @@
             } catch (err) {
                 if (err.name !== 'AbortError') {
                     console.error('[TranscodeDownloader] Download failed:', err);
-                    updateEntryStatus(entry, 'Download failed.');
+                    updateEntryStatus(entry, t('DownloadFailed'));
                     await new Promise(r => setTimeout(r, 3000));
                 }
             }
@@ -184,7 +281,7 @@
                 if (statusEl) statusEl.style.color = '#aaa';
             } else {
                 if (track) track.style.display = 'none';
-                if (statusEl) { statusEl.style.color = '#666'; statusEl.textContent = 'Waiting…'; }
+                if (statusEl) { statusEl.style.color = '#666'; statusEl.textContent = t('Waiting'); }
             }
         });
     }
@@ -238,6 +335,10 @@
             console.error('[TranscodeDownloader] ApiClient not available after retries');
         }
     }
+
+    let currentItemId = null;
+    let currentItem = null;
+    let currentItemPromise = null;
 
     function fetchItemMetadata(itemId) {
         currentItemPromise = new Promise((resolve) => {
@@ -299,7 +400,7 @@
     function injectMenuItems(downloadBtn) {
         if (downloadBtn.parentNode.querySelector('[data-id^="qd-"]')) return;
 
-        const transcodeBtn = makeMenuItem('video_settings', 'Download (Transcode…)', () => {
+        const transcodeBtn = makeMenuItem('video_settings', t('DownloadTranscode'), () => {
             closeActiveSheet();
             showQualitySheet();
         });
@@ -323,6 +424,9 @@
     async function showQualitySheet() {
         if (document.getElementById('qd-quality-sheet')) return;
 
+        // Ensure strings are loaded before rendering UI
+        if (stringsPromise) await stringsPromise;
+
         const liveItemId = extractItemId(window.location.hash);
         if (liveItemId && liveItemId !== currentItemId) {
             currentItem = null;
@@ -341,12 +445,12 @@
 
         const header = document.createElement('div');
         header.style.cssText = 'padding:16px 20px 8px;font-size:15px;font-weight:600;color:#fff;opacity:0.7;';
-        header.textContent = 'Qualität wählen';
+        header.textContent = t('ChooseQuality');
         sheet.appendChild(header);
 
         const loadingEl = document.createElement('div');
         loadingEl.style.cssText = 'padding:16px 20px;color:#aaa;font-size:14px;';
-        loadingEl.textContent = 'Lade Medieninfos…';
+        loadingEl.textContent = t('LoadingMediaInfo');
         sheet.appendChild(loadingEl);
 
         scrim.appendChild(sheet);
@@ -373,7 +477,7 @@
         if (tiers.length === 0) {
             const empty = document.createElement('div');
             empty.style.cssText = 'padding:16px 20px;color:#aaa;font-size:14px;';
-            empty.textContent = 'Keine Transcode-Optionen verfügbar.';
+            empty.textContent = t('NoTranscodeOptions');
             sheet.appendChild(empty);
         }
     }
@@ -423,4 +527,5 @@
     }
 
     injectQueuePanel();
+    initStrings();
 })();

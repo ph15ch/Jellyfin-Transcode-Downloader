@@ -1,0 +1,8 @@
+{
+    "ChooseQuality": "Choose quality",
+    "LoadingMediaInfo": "Loading media info…",
+    "NoTranscodeOptions": "No transcode options available.",
+    "Waiting": "Waiting…",
+    "DownloadTranscode": "Download (Transcode…)",
+    "DownloadFailed": "Download failed."
+}
