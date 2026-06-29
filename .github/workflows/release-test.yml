@@ -1,0 +1,189 @@
+name: Release (Testing)
+
+# Test/pre-release pipeline. Mirrors release.yml but:
+#   - Triggered by tags matching `test/v*.*.*` (e.g. `test/v1.2.3`)
+#   - Writes to repo/manifest-testing.json, NOT repo/manifest.json
+#   - Creates a GitHub pre-release (marked as pre-release in the UI)
+#
+# Usage:
+#   git tag -a test/v1.2.3 -m "What changed"
+#   git push origin test/v1.2.3
+#
+# Point your test Jellyfin instance at:
+#   https://raw.githubusercontent.com/ph15ch/Jellyfin-Transcode-Downloader/main/repo/manifest-testing.json
+
+on:
+  push:
+    tags:
+      - 'test/v*.*.*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-test
+  cancel-in-progress: false
+
+jobs:
+  release-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Derive version and read changelog from tag
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git fetch --force origin "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
+
+          # Strip the `test/v` prefix to get the bare semver.
+          VERSION="${GITHUB_REF_NAME#test/v}"
+          echo "Releasing test version: ${VERSION}"
+
+          TAG_TYPE="$(git cat-file -t "${GITHUB_REF_NAME}")"
+          if [ "${TAG_TYPE}" != "tag" ]; then
+            echo "::error::Tag '${GITHUB_REF_NAME}' is not an annotated tag (object type: ${TAG_TYPE}). Use: git tag -a test/v1.2.3 -m 'changelog'" >&2
+            exit 1
+          fi
+
+          CHANGELOG="$(git tag -l --format='%(contents)' "${GITHUB_REF_NAME}")"
+
+          CHANGELOG="$(printf '%s\n' "${CHANGELOG}" \
+            | sed '/-----BEGIN PGP SIGNATURE-----/,$d')"
+
+          CHANGELOG="$(printf '%s' "${CHANGELOG}" \
+            | sed -e ':a' -e '/^[[:space:]]*$/{$d;N;ba}' \
+            | sed -e '/./,$!d')"
+
+          if [ -z "${CHANGELOG//[[:space:]]/}" ]; then
+            echo "::error::Annotated tag '${GITHUB_REF_NAME}' has an EMPTY message. The tag message IS the changelog; aborting." >&2
+            exit 1
+          fi
+
+          echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
+
+          DELIM="EOF_$(openssl rand -hex 16)"
+          {
+            echo "changelog<<${DELIM}"
+            printf '%s\n' "${CHANGELOG}"
+            echo "${DELIM}"
+          } >> "${GITHUB_OUTPUT}"
+
+          echo "----- changelog -----"
+          printf '%s\n' "${CHANGELOG}"
+          echo "---------------------"
+
+      - name: Build (publish from tag)
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.meta.outputs.version }}"
+          dotnet publish src/JellyfinTranscodeDownloader.csproj \
+            -c Release \
+            -o publish/ \
+            -p:Version="${VERSION}"
+
+      - name: Package and checksum
+        id: package
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.meta.outputs.version }}"
+          ZIP_NAME="jellyfin-transcode-downloader_${VERSION}-test.zip"
+
+          cp logo.png publish/
+          cd publish
+          zip -r "../${ZIP_NAME}" Jellyfin.Plugin.TranscodeDownloader.dll logo.png
+          cd ..
+
+          CHECKSUM="$(md5sum "${ZIP_NAME}" | awk '{ print $1 }')"
+          echo "Zip: ${ZIP_NAME}  md5: ${CHECKSUM}"
+
+          echo "zip_name=${ZIP_NAME}" >> "${GITHUB_OUTPUT}"
+          echo "checksum=${CHECKSUM}" >> "${GITHUB_OUTPUT}"
+
+      - name: Update test manifest on main, commit and push
+        shell: bash
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+          ZIP_NAME: ${{ steps.package.outputs.zip_name }}
+          CHECKSUM: ${{ steps.package.outputs.checksum }}
+          CHANGELOG: ${{ steps.meta.outputs.changelog }}
+        run: |
+          set -euo pipefail
+
+          FULL_VERSION="${VERSION}.0"
+          SOURCE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/${ZIP_NAME}"
+          TIMESTAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+          git fetch origin main
+          git checkout -B main origin/main
+
+          if jq -e --arg v "${FULL_VERSION}" \
+              '.[0].versions[]?.version == $v | select(.)' \
+              repo/manifest-testing.json | grep -q true; then
+            echo "::error::Version '${FULL_VERSION}' already exists in repo/manifest-testing.json. Cut a new test tag." >&2
+            exit 1
+          fi
+
+          jq \
+            --arg version   "${FULL_VERSION}" \
+            --arg changelog "${CHANGELOG}" \
+            --arg targetAbi "10.11.8.0" \
+            --arg sourceUrl "${SOURCE_URL}" \
+            --arg checksum  "${CHECKSUM}" \
+            --arg timestamp "${TIMESTAMP}" \
+            '.[0].versions = ([{
+                version:   $version,
+                changelog: $changelog,
+                targetAbi: $targetAbi,
+                sourceUrl: $sourceUrl,
+                checksum:  $checksum,
+                timestamp: $timestamp
+              }] + .[0].versions)' \
+            repo/manifest-testing.json > repo/manifest-testing.json.tmp
+
+          if ! jq -e --arg v "${FULL_VERSION}" \
+              'type == "array"
+               and (.[0].versions | type == "array")
+               and (any(.[0].versions[]; .version == $v))' \
+              repo/manifest-testing.json.tmp > /dev/null; then
+            echo "::error::Generated test manifest is invalid or missing version '${FULL_VERSION}'. Aborting before commit." >&2
+            rm -f repo/manifest-testing.json.tmp
+            exit 1
+          fi
+
+          mv repo/manifest-testing.json.tmp repo/manifest-testing.json
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add repo/manifest-testing.json
+          git commit -m "release(test): add manifest entry for ${GITHUB_REF_NAME}"
+
+          git pull --rebase origin main
+          git push origin main
+
+      - name: Create GitHub pre-release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create "${GITHUB_REF_NAME}" \
+            "${{ steps.package.outputs.zip_name }}" \
+            --title "Transcode Downloader ${{ steps.meta.outputs.version }} (test)" \
+            --generate-notes \
+            --prerelease
