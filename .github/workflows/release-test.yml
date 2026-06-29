@@ -124,7 +124,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          FULL_VERSION="${VERSION}.0"
+          FULL_VERSION="${VERSION}"
           SOURCE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/${ZIP_NAME}"
           TIMESTAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
