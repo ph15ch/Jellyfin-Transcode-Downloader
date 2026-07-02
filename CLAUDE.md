@@ -73,7 +73,12 @@ The `?v=` query is the plugin assembly version, set at release time via
 ### Client logic (`web/plugin.js` — only its delivery is owned by C#; do not change its logic)
 
 - **Download URL — transcoded**:
-  `/Videos/{itemId}/stream.mp4?MaxStreamingBitrate={bitrate}&VideoCodec=h264&AudioCodec=aac&MaxAudioChannels=2&Static=false&api_key={token}`
+  `/Videos/{itemId}/stream.mp4?MediaSourceId={mediaSourceId}&VideoBitrate={bitrate}&VideoCodec=h264&AudioCodec=aac&MaxAudioChannels=2&Static=false&api_key={token}`
+  Must be `VideoBitrate`, not `MaxStreamingBitrate` — the latter is a client-capability hint read during
+  the `PlaybackInfo` negotiation, not the encoder target. Sent alone (or paired with `MaxHeight`), it
+  collapses the transcode to Jellyfin's minimum tier (416×234) regardless of the value, reproducible via
+  both the progressive and HLS endpoints. `VideoBitrate` alone is sufficient — resolution is derived from
+  it automatically, no `MaxHeight`/`MaxWidth` needed.
 - **Filename** (from `/Users/{userId}/Items/{itemId}`):
   - Movie: `"{Name} ({ProductionYear}).mp4"`
   - Episode: `"{SeriesName} S{SeasonNumber padded}E{EpisodeNumber padded} - {Name}.mp4"`

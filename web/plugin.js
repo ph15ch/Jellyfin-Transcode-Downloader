@@ -2,20 +2,20 @@
     const SUPPORTED_LOCALES = ['en-us', 'de', 'fr', 'es', 'zh-cn', 'nl'];
 
     const QUALITY_TIERS = [
-        { label: '2160p · 120 Mbps', bitrate: 120_000_000, maxHeight: 2160 },
-        { label: '2160p · 80 Mbps',  bitrate:  80_000_000, maxHeight: 2160 },
-        { label: '2160p · 60 Mbps',  bitrate:  60_000_000, maxHeight: 2160 },
-        { label: '2160p · 40 Mbps',  bitrate:  40_000_000, maxHeight: 2160 },
-        { label: '2160p · 20 Mbps',  bitrate:  20_000_000, maxHeight: 2160 },
-        { label: '1440p · 15 Mbps',  bitrate:  15_000_000, maxHeight: 1440 },
-        { label: '1440p · 10 Mbps',  bitrate:  10_000_000, maxHeight: 1440 },
-        { label: '1080p · 8 Mbps',   bitrate:   8_000_000, maxHeight: 1080 },
-        { label: '1080p · 6 Mbps',   bitrate:   6_000_000, maxHeight: 1080 },
-        { label: '720p · 4 Mbps',    bitrate:   4_000_000, maxHeight:  720 },
-        { label: '720p · 3 Mbps',    bitrate:   3_000_000, maxHeight:  720 },
-        { label: '720p · 1.5 Mbps',  bitrate:   1_500_000, maxHeight:  720 },
-        { label: '480p · 720 kbps',  bitrate:     720_000, maxHeight:  480 },
-        { label: '360p · 420 kbps',  bitrate:     420_000, maxHeight:  360 },
+        { label: '2160p · 120 Mbps', bitrate: 120_000_000 },
+        { label: '2160p · 80 Mbps',  bitrate:  80_000_000 },
+        { label: '2160p · 60 Mbps',  bitrate:  60_000_000 },
+        { label: '2160p · 40 Mbps',  bitrate:  40_000_000 },
+        { label: '2160p · 20 Mbps',  bitrate:  20_000_000 },
+        { label: '1440p · 15 Mbps',  bitrate:  15_000_000 },
+        { label: '1440p · 10 Mbps',  bitrate:  10_000_000 },
+        { label: '1080p · 8 Mbps',   bitrate:   8_000_000 },
+        { label: '1080p · 6 Mbps',   bitrate:   6_000_000 },
+        { label: '720p · 4 Mbps',    bitrate:   4_000_000 },
+        { label: '720p · 3 Mbps',    bitrate:   3_000_000 },
+        { label: '720p · 1.5 Mbps',  bitrate:   1_500_000 },
+        { label: '480p · 720 kbps',  bitrate:     720_000 },
+        { label: '360p · 420 kbps',  bitrate:     420_000 },
     ];
 
     // --- i18n ---
@@ -450,7 +450,7 @@
         for (const tier of tiers) {
             const btn = makeMenuItem('video_settings', tier.label, () => {
                 scrim.remove();
-                onTranscodeMenuClick(tier.bitrate, tier.maxHeight);
+                onTranscodeMenuClick(tier.bitrate);
             });
             sheet.appendChild(btn);
         }
@@ -465,17 +465,20 @@
 
     // --- Download actions ---
 
-    function onTranscodeMenuClick(bitrate, maxHeight) {
+    function onTranscodeMenuClick(bitrate) {
         if (!currentItem) return;
         getApiClient(0, 5, (client) => {
             const token = client.accessToken();
             const baseUrl = client.serverAddress() || window.location.origin;
-            addToQueue(baseUrl, currentItemId, token, bitrate, maxHeight, currentItem);
+            addToQueue(baseUrl, currentItemId, token, bitrate, currentItem);
         });
     }
 
-    function addToQueue(baseUrl, itemId, token, selectedBitrate, maxHeight, item) {
-        const url = `${baseUrl}/Videos/${itemId}/stream.mp4?MaxStreamingBitrate=${selectedBitrate}&MaxHeight=${maxHeight}&VideoCodec=h264&AudioCodec=aac&MaxAudioChannels=2&allowVideoStreamCopy=false&allowAudioStreamCopy=false&Static=false&api_key=${token}`;
+    function addToQueue(baseUrl, itemId, token, selectedBitrate, item) {
+        const mediaSourceId = item.MediaSources && item.MediaSources[0] && item.MediaSources[0].Id
+            ? item.MediaSources[0].Id
+            : itemId;
+        const url = `${baseUrl}/Videos/${itemId}/stream.mp4?MediaSourceId=${mediaSourceId}&VideoBitrate=${selectedBitrate}&VideoCodec=h264&AudioCodec=aac&MaxAudioChannels=2&allowVideoStreamCopy=false&allowAudioStreamCopy=false&Static=false&api_key=${token}`;
 
         const pad = (n) => String(n).padStart(2, '0');
         let filename;
