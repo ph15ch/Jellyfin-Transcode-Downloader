@@ -475,7 +475,10 @@
     }
 
     function addToQueue(baseUrl, itemId, token, selectedBitrate, maxHeight, item) {
-        const url = `${baseUrl}/Videos/${itemId}/stream.mp4?MaxStreamingBitrate=${selectedBitrate}&MaxHeight=${maxHeight}&VideoCodec=h264&AudioCodec=aac&MaxAudioChannels=2&allowVideoStreamCopy=false&allowAudioStreamCopy=false&Static=false&api_key=${token}`;
+        const mediaSourceId = item.MediaSources && item.MediaSources[0] && item.MediaSources[0].Id
+            ? item.MediaSources[0].Id
+            : itemId;
+        const url = `${baseUrl}/Videos/${itemId}/stream.mp4?MediaSourceId=${mediaSourceId}&MaxStreamingBitrate=${selectedBitrate}&MaxHeight=${maxHeight}&VideoCodec=h264&AudioCodec=aac&MaxAudioChannels=2&allowVideoStreamCopy=false&allowAudioStreamCopy=false&Static=false&api_key=${token}`;
 
         const pad = (n) => String(n).padStart(2, '0');
         let filename;
