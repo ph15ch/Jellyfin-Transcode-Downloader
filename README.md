@@ -4,8 +4,9 @@
 ![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/ph15ch/Jellyfin-Transcode-Downloader/total)
 
 A Jellyfin **server plugin** that adds a quality-selection transcoded download option to the
-More menu on item detail pages. Pick a quality tier and Jellyfin transcodes the file to
-H.264/AAC on the fly. Use Jellyfin's built-in Download button to grab the original file.
+More menu on item detail pages. Pick a video codec, an audio codec and a quality tier, and
+Jellyfin transcodes the file on the fly. Use Jellyfin's built-in Download button to grab the
+original file.
 ## My other projects
 - [PackShare](https://packshare.de) is a tool to plan your festival with your friends. One source of truth: what do we need, who buys it and who brings it. Includes a planning, buying and packing tool.
 - [Easy Intervals MCP](https://easy-intervals.de) is a MCP Server for www.intervals.icu. This helps you to connect your favorite LLM to your health, fitness and trainings data. 
@@ -18,19 +19,54 @@ After installing the plugin, open any **movie or episode detail page** in the Je
 client. Open the **"More" menu** (the `⋯` / kebab menu on the detail page) — a
 **"Download (Transcode…)"** entry appears at the bottom of the list.
 
-Selecting it opens a quality picker. Choose a bitrate tier — Jellyfin transcodes on the fly
-and the plugin downloads the stream with a live progress bar. To grab the original file
-without transcoding, use Jellyfin's own **Download** button that's already in the More menu.
+Selecting it opens a quality picker. Choose a video codec, an audio codec and a bitrate tier —
+Jellyfin transcodes on the fly and the plugin downloads the stream with a live progress bar.
+To grab the original file without transcoding, use Jellyfin's own **Download** button that's
+already in the More menu.
 
 You can queue multiple items: navigate to another movie or episode and add more downloads
 while one is already in progress. Each queued item waits its turn and starts automatically
 when the one ahead of it finishes.
 
+### Choosing a codec
+
+The picker offers **H.264 (AVC)**, **HEVC (H.265)** and **AV1** for video, and **AAC** or
+**Opus** for audio. H.264/AAC is the default and plays everywhere. Your last choice is
+remembered in the browser, so you only pick it once.
+
+The bitrate tiers are **codec-relative**: they are calibrated for H.264, and HEVC (≈ 65%) and
+AV1 (≈ 50%) targets are scaled down so a given rung means roughly the same picture quality on
+every codec. Picking "1080p" on AV1 therefore produces a smaller file than on H.264, not a
+worse-looking one.
+
+A codec is shown greyed out, with the reason spelled out underneath, when:
+
+- **it isn't supported by this server's FFmpeg** — Jellyfin resolves e.g. AV1 to `libsvtav1`,
+  but not every FFmpeg build includes it. The plugin asks the server which encoders actually
+  exist rather than letting the download start and die halfway through.
+- **it's disabled by the server administrator** — HEVC and AV1 encoding are governed by
+  **Dashboard → Playback → "Allow encoding in HEVC format" / "Allow encoding in AV1 format"**,
+  and **both are off by default**. An administrator has to turn them on before those codecs
+  become selectable here.
+
+If a codec resolves to a **software encoder** (`libx265`, `libsvtav1`), the picker says so. A
+software AV1 transcode of a long 4K film can run for hours, and the download is held in the
+browser's memory until it finishes.
+
+Two playback caveats worth knowing before picking something exotic:
+
+- **HEVC in MP4** is written by Jellyfin with the `hev1` tag rather than `hvc1`. VLC, mpv and
+  ffmpeg play it fine; Apple QuickTime and Safari generally will not.
+- **Opus in MP4** is likewise well supported by VLC, mpv, Chrome and Firefox, but not by
+  Apple's players. Pick AAC if the file has to play on an Apple device.
+
 ### What happens in the background
 
-Jellyfin encodes the video server-side to H.264/AAC at the selected bitrate and streams the
+Jellyfin encodes the video server-side to the selected codec and bitrate and streams the
 result. The plugin downloads the stream chunk by chunk, shows a live progress bar with an
-estimated file size, and saves it as an `.mp4` once complete.
+estimated file size, and saves it as an `.mp4` once complete. The chosen codecs and bitrate
+are recorded in the filename, e.g. `Movie (2020) [AV1 4Mbps AAC].mp4`, so files downloaded at
+different settings don't collide.
 
 The estimated file size shown during a transcoded download is calculated from the selected
 bitrate and the item's runtime (`~size = bitrate × duration ÷ 8`). It carries a `~`
@@ -38,10 +74,10 @@ prefix because VBR encoding means the real size can vary by ±10–15%.
 
 ### Download queue
 
-A panel in the bottom-right corner shows all queued downloads. The active item displays a
-progress bar; items waiting to start show "Waiting…". Each item has its own **✕** cancel
-button — cancelling removes only that item and the next one starts automatically. The panel
-disappears when the queue is empty.
+A panel in the bottom-right corner shows all queued downloads, each labelled with its codecs
+and bitrate. The active item displays a progress bar; items waiting to start show "Waiting…".
+Each item has its own **✕** cancel button — cancelling removes only that item and the next one
+starts automatically. The panel disappears when the queue is empty.
 
 The queue is in-memory only: closing or reloading the browser tab clears it.
 
@@ -56,10 +92,17 @@ plugin, so it never writes to Jellyfin's web directory. This is what makes it wo
 standard package and Docker installs where the web root is read-only, and it survives
 Jellyfin web updates.
 
+A second endpoint, `GET /TranscodeDownloader/Codecs`, reports which video and audio encoders
+this server's FFmpeg actually has and which the administrator permits. Unlike the script and
+translation endpoints it requires a logged-in session, because it exposes server encoding
+configuration. If it is unreachable the picker quietly falls back to H.264/AAC only.
+
 ## Requirements
 
 - **Jellyfin 10.11.x** (built against the 10.11.8 SDK; ABI floor `10.11.8.0`).
 - **File Transformation plugin** (>= **v2.2.1.0**) — strongly recommended (see below).
+- For HEVC or AV1 downloads: an FFmpeg build with the matching encoder, **and** the
+  corresponding **Dashboard → Playback** toggle enabled (both are off by default).
 
 ### Installing File Transformation (one-time)
 
