@@ -1,22 +1,87 @@
 (() => {
     const SUPPORTED_LOCALES = ['en-us', 'de', 'fr', 'es', 'zh-cn', 'nl'];
 
+    // Bitrate rungs, calibrated for H.264. Other codecs scale these by their efficiency
+    // factor so a given rung means roughly the same picture quality across codecs.
     const QUALITY_TIERS = [
-        { label: '2160p · 120 Mbps', bitrate: 120_000_000 },
-        { label: '2160p · 80 Mbps',  bitrate:  80_000_000 },
-        { label: '2160p · 60 Mbps',  bitrate:  60_000_000 },
-        { label: '2160p · 40 Mbps',  bitrate:  40_000_000 },
-        { label: '2160p · 20 Mbps',  bitrate:  20_000_000 },
-        { label: '1440p · 15 Mbps',  bitrate:  15_000_000 },
-        { label: '1440p · 10 Mbps',  bitrate:  10_000_000 },
-        { label: '1080p · 8 Mbps',   bitrate:   8_000_000 },
-        { label: '1080p · 6 Mbps',   bitrate:   6_000_000 },
-        { label: '720p · 4 Mbps',    bitrate:   4_000_000 },
-        { label: '720p · 3 Mbps',    bitrate:   3_000_000 },
-        { label: '720p · 1.5 Mbps',  bitrate:   1_500_000 },
-        { label: '480p · 720 kbps',  bitrate:     720_000 },
-        { label: '360p · 420 kbps',  bitrate:     420_000 },
+        { resolution: '2160p', bitrate: 120_000_000 },
+        { resolution: '2160p', bitrate:  80_000_000 },
+        { resolution: '2160p', bitrate:  60_000_000 },
+        { resolution: '2160p', bitrate:  40_000_000 },
+        { resolution: '2160p', bitrate:  20_000_000 },
+        { resolution: '1440p', bitrate:  15_000_000 },
+        { resolution: '1440p', bitrate:  10_000_000 },
+        { resolution: '1080p', bitrate:   8_000_000 },
+        { resolution: '1080p', bitrate:   6_000_000 },
+        { resolution: '720p',  bitrate:   4_000_000 },
+        { resolution: '720p',  bitrate:   3_000_000 },
+        { resolution: '720p',  bitrate:   1_500_000 },
+        { resolution: '480p',  bitrate:     720_000 },
+        { resolution: '360p',  bitrate:     420_000 },
     ];
+
+    // --- Codecs ---
+
+    // `factor` scales the H.264-calibrated tiers above to a roughly equivalent quality.
+    const VIDEO_CODECS = [
+        { id: 'h264', label: 'H.264 (AVC)',  tag: 'H264', factor: 1 },
+        { id: 'hevc', label: 'HEVC (H.265)', tag: 'HEVC', factor: 0.65 },
+        { id: 'av1',  label: 'AV1',          tag: 'AV1',  factor: 0.5 },
+    ];
+
+    const AUDIO_CODECS = [
+        { id: 'aac',  label: 'AAC',  tag: 'AAC' },
+        { id: 'opus', label: 'Opus', tag: 'Opus' },
+    ];
+
+    const DEFAULT_VIDEO_CODEC = 'h264';
+    const DEFAULT_AUDIO_CODEC = 'aac';
+
+    const STORAGE_VIDEO_CODEC = 'transcodeDownloader.videoCodec';
+    const STORAGE_AUDIO_CODEC = 'transcodeDownloader.audioCodec';
+
+    let selectedVideoCodec = DEFAULT_VIDEO_CODEC;
+    let selectedAudioCodec = DEFAULT_AUDIO_CODEC;
+
+    // { video: { h264: { encoder, hardware, supported, allowed }, … }, audio: { … } }
+    let codecCapabilities = null;
+    // false while unknown and whenever the capability probe failed — the UI then stays on
+    // H.264/AAC and hides the selectors rather than guessing what the server can do.
+    let codecCapabilitiesResolved = false;
+    let codecCapabilitiesPromise = null;
+
+    function findCodec(catalogue, id) {
+        return catalogue.find(codec => codec.id === id) || null;
+    }
+
+    function codecTag(catalogue, id) {
+        const codec = findCodec(catalogue, id);
+        return codec ? codec.tag : String(id).toUpperCase();
+    }
+
+    function codecLabel(catalogue, id) {
+        const codec = findCodec(catalogue, id);
+        return codec ? codec.label : String(id).toUpperCase();
+    }
+
+    function videoCodecFactor(id) {
+        const codec = findCodec(VIDEO_CODECS, id);
+        return codec ? codec.factor : 1;
+    }
+
+    // Round a scaled bitrate to a readable step so codec-relative labels stay legible.
+    // With factor 1 (H.264) every tier round-trips to its original value.
+    function scaleBitrate(baseBitrate, factor) {
+        const scaled = baseBitrate * factor;
+        if (scaled >= 10_000_000) return Math.round(scaled / 1_000_000) * 1_000_000;
+        if (scaled >= 1_000_000) return Math.round(scaled / 100_000) * 100_000;
+        return Math.round(scaled / 10_000) * 10_000;
+    }
+
+    function formatBitrate(bitrate) {
+        if (bitrate >= 1_000_000) return `${Number((bitrate / 1_000_000).toFixed(1))} Mbps`;
+        return `${Math.round(bitrate / 1000)} kbps`;
+    }
 
     // --- i18n ---
 
@@ -28,6 +93,13 @@
         Waiting: 'Waiting…',
         DownloadTranscode: 'Download (Transcode…)',
         DownloadFailed: 'Download failed.',
+        ChooseVideoCodec: 'Video codec',
+        ChooseAudioCodec: 'Audio codec',
+        CodecUnsupported: "not supported by this server's FFmpeg",
+        CodecDisabledByAdmin: 'disabled by the server administrator',
+        SoftwareEncodingHint: 'Software encoding — this can take a long time and the file is held in memory until it finishes.',
+        DownloadFailedCodec: 'Download failed — the server could not encode with {codec}.',
+        DownloadFailedStatus: 'Download failed (HTTP {status}).',
     };
 
     // Populated by initStrings(); null until loaded.
@@ -134,7 +206,11 @@
 
             try {
                 const response = await fetch(entry.url, { signal: entry.abortController.signal });
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                if (!response.ok) {
+                    const httpError = new Error(`HTTP ${response.status}`);
+                    httpError.status = response.status;
+                    throw httpError;
+                }
                 const blob = await readStream(response.body, entry.estimatedBytes, entry);
                 triggerBlobDownload(blob, entry.filename);
                 updateEntryProgress(entry, 1, entry.estimatedBytes);
@@ -142,7 +218,7 @@
             } catch (err) {
                 if (err.name !== 'AbortError') {
                     console.error('[TranscodeDownloader] Download failed:', err);
-                    updateEntryStatus(entry, t('DownloadFailed'));
+                    updateEntryStatus(entry, describeFailure(entry, err));
                     await new Promise(r => setTimeout(r, 3000));
                 }
             }
@@ -153,6 +229,17 @@
             renderQueue();
         }
         queueProcessing = false;
+    }
+
+    // A transcode that never delivered a byte means the server accepted the request and the
+    // encoder then failed to start — the observable symptom of an encoder Jellyfin resolves
+    // to but FFmpeg does not actually have.
+    function describeFailure(entry, err) {
+        if (!entry.receivedBytes && entry.videoCodec && entry.videoCodec !== DEFAULT_VIDEO_CODEC) {
+            return t('DownloadFailedCodec').replace('{codec}', codecLabel(VIDEO_CODECS, entry.videoCodec));
+        }
+        if (err && err.status) return t('DownloadFailedStatus').replace('{status}', err.status);
+        return t('DownloadFailed');
     }
 
     // --- Stream reader ---
@@ -167,6 +254,7 @@
             if (done) break;
             chunks.push(value);
             received += value.byteLength;
+            entry.receivedBytes = received;
             updateEntryProgress(entry, received / estimatedBytes, estimatedBytes, received);
         }
 
@@ -232,6 +320,14 @@
                 top.appendChild(name);
                 top.appendChild(cancelBtn);
                 row.appendChild(top);
+
+                // Codec + bitrate, so several queued items of the same title stay distinguishable
+                if (entry.codecLabel) {
+                    const meta = document.createElement('div');
+                    meta.style.cssText = 'font-size:11px;color:#888;margin-bottom:4px;';
+                    meta.textContent = entry.codecLabel;
+                    row.appendChild(meta);
+                }
 
                 // Progress bar (always created; hidden for waiting items)
                 const track = document.createElement('div');
@@ -307,14 +403,138 @@
         return params.get('id');
     }
 
-    function getApiClient(attempt, maxAttempts, callback) {
+    function getApiClient(attempt, maxAttempts, callback, onFail) {
         if (window.ApiClient && window.ApiClient.accessToken && window.ApiClient.getCurrentUserId) {
             callback(window.ApiClient);
         } else if (attempt < maxAttempts) {
-            setTimeout(() => getApiClient(attempt + 1, maxAttempts, callback), 500);
+            setTimeout(() => getApiClient(attempt + 1, maxAttempts, callback, onFail), 500);
         } else {
             console.error('[TranscodeDownloader] ApiClient not available after retries');
+            if (onFail) onFail();
         }
+    }
+
+    // --- Codec capabilities ---
+
+    // Jellyfin serialises with PascalCase; tolerate camelCase so the contract survives a
+    // serializer change without breaking the client.
+    function readField(obj, name) {
+        if (!obj) return undefined;
+        if (obj[name] !== undefined) return obj[name];
+        return obj[name.charAt(0).toLowerCase() + name.slice(1)];
+    }
+
+    function parseCapabilityList(list) {
+        const map = {};
+        (list || []).forEach((entry) => {
+            const id = readField(entry, 'Codec');
+            if (!id) return;
+            map[String(id).toLowerCase()] = {
+                encoder: readField(entry, 'Encoder') || '',
+                hardware: readField(entry, 'IsHardware') === true,
+                supported: readField(entry, 'IsSupported') === true,
+                allowed: readField(entry, 'IsAllowedByAdmin') === true,
+            };
+        });
+        return map;
+    }
+
+    function readStoredCodec(key) {
+        try {
+            return window.localStorage.getItem(key);
+        } catch (_) {
+            return null;
+        }
+    }
+
+    function storeCodec(key, value) {
+        try {
+            window.localStorage.setItem(key, value);
+        } catch (_) {
+            // localStorage can be unavailable (private mode, sandboxed iframe) — preference
+            // simply won't stick.
+        }
+    }
+
+    // Why a codec cannot be used, or null when it can.
+    function codecBlockReason(kind, id) {
+        if (!codecCapabilities) return null;
+        const capability = codecCapabilities[kind][id];
+        if (!capability) return 'unsupported';
+        if (!capability.allowed) return 'admin';
+        if (!capability.supported) return 'unsupported';
+        return null;
+    }
+
+    function codecReasonText(reason) {
+        return reason === 'admin' ? t('CodecDisabledByAdmin') : t('CodecUnsupported');
+    }
+
+    function isCodecSelectable(kind, id) {
+        const catalogue = kind === 'video' ? VIDEO_CODECS : AUDIO_CODECS;
+        return !!findCodec(catalogue, id) && codecBlockReason(kind, id) === null;
+    }
+
+    function firstSelectableCodec(kind) {
+        const catalogue = kind === 'video' ? VIDEO_CODECS : AUDIO_CODECS;
+        const codec = catalogue.find(candidate => isCodecSelectable(kind, candidate.id));
+        return codec ? codec.id : null;
+    }
+
+    // A stored preference is only honoured if the server still offers that codec.
+    function resolveCodecPreference(kind, storageKey, fallback) {
+        const stored = readStoredCodec(storageKey);
+        if (stored && isCodecSelectable(kind, stored)) return stored;
+        if (isCodecSelectable(kind, fallback)) return fallback;
+        return firstSelectableCodec(kind) || fallback;
+    }
+
+    function selectCodec(kind, id) {
+        if (kind === 'video') {
+            selectedVideoCodec = id;
+            storeCodec(STORAGE_VIDEO_CODEC, id);
+        } else {
+            selectedAudioCodec = id;
+            storeCodec(STORAGE_AUDIO_CODEC, id);
+        }
+    }
+
+    // Fetched lazily on first quality-sheet open and memoised for the page session.
+    function fetchCodecCapabilities() {
+        if (codecCapabilitiesPromise) return codecCapabilitiesPromise;
+
+        codecCapabilitiesPromise = new Promise((resolve) => {
+            const giveUp = (err) => {
+                console.warn('[TranscodeDownloader] Codec capabilities unavailable, falling back to H.264/AAC:', err);
+                codecCapabilities = null;
+                codecCapabilitiesResolved = false;
+                selectedVideoCodec = DEFAULT_VIDEO_CODEC;
+                selectedAudioCodec = DEFAULT_AUDIO_CODEC;
+                resolve();
+            };
+
+            getApiClient(0, 10, async (client) => {
+                try {
+                    const baseUrl = client.serverAddress() || window.location.origin;
+                    const res = await fetch(`${baseUrl}/TranscodeDownloader/Codecs?api_key=${encodeURIComponent(client.accessToken())}`);
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    const payload = await res.json();
+
+                    codecCapabilities = {
+                        video: parseCapabilityList(readField(payload, 'VideoCodecs')),
+                        audio: parseCapabilityList(readField(payload, 'AudioCodecs')),
+                    };
+                    codecCapabilitiesResolved = true;
+                    selectedVideoCodec = resolveCodecPreference('video', STORAGE_VIDEO_CODEC, DEFAULT_VIDEO_CODEC);
+                    selectedAudioCodec = resolveCodecPreference('audio', STORAGE_AUDIO_CODEC, DEFAULT_AUDIO_CODEC);
+                    resolve();
+                } catch (err) {
+                    giveUp(err);
+                }
+            }, () => giveUp(new Error('ApiClient unavailable')));
+        });
+
+        return codecCapabilitiesPromise;
     }
 
     let currentItemId = null;
@@ -394,11 +614,94 @@
         if (backdrop) backdrop.click();
     }
 
-    const _menuObserver = new MutationObserver(() => {
-        const downloadBtn = document.querySelector('.actionSheetMenuItem[data-id="download"]');
-        if (downloadBtn) injectMenuItems(downloadBtn);
-    });
-    _menuObserver.observe(document.body, { childList: true, subtree: true });
+    // --- Codec selector ---
+
+    function makeCodecChip(kind, codec, onSelect) {
+        const reason = codecBlockReason(kind, codec.id);
+        const selected = (kind === 'video' ? selectedVideoCodec : selectedAudioCodec) === codec.id;
+
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.setAttribute('data-id', `qd-codec-${kind}-${codec.id}`);
+        chip.textContent = codec.label;
+        chip.style.cssText = 'padding:6px 14px;border-radius:16px;font-size:13px;font-family:inherit;color:#fff;'
+            + `border:1px solid ${selected ? '#00a4dc' : '#444'};`
+            + `background:${selected ? 'rgba(0,164,220,0.2)' : 'transparent'};`
+            + (reason ? 'opacity:0.4;cursor:not-allowed;' : 'cursor:pointer;');
+
+        if (reason) {
+            chip.disabled = true;
+            chip.title = codecReasonText(reason);
+        } else {
+            chip.setAttribute('aria-pressed', selected ? 'true' : 'false');
+            chip.addEventListener('click', () => onSelect(codec.id));
+        }
+
+        return chip;
+    }
+
+    function buildCodecRow(catalogue, kind, label, onSelect) {
+        const wrap = document.createElement('div');
+        wrap.style.cssText = 'margin-bottom:10px;';
+
+        const title = document.createElement('div');
+        title.style.cssText = 'font-size:13px;font-weight:600;color:#fff;opacity:0.7;margin-bottom:6px;';
+        title.textContent = label;
+        wrap.appendChild(title);
+
+        const chips = document.createElement('div');
+        chips.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;';
+        catalogue.forEach(codec => chips.appendChild(makeCodecChip(kind, codec, onSelect)));
+        wrap.appendChild(chips);
+
+        // Unavailable codecs stay visible with the reason spelled out — a silent absence is
+        // impossible for a user to self-diagnose.
+        catalogue.forEach((codec) => {
+            const reason = codecBlockReason(kind, codec.id);
+            if (!reason) return;
+            const note = document.createElement('div');
+            note.style.cssText = 'font-size:12px;color:#888;margin-top:6px;';
+            note.textContent = `${codec.label} — ${codecReasonText(reason)}`;
+            wrap.appendChild(note);
+        });
+
+        return wrap;
+    }
+
+    // Warn when the selected codec resolves to a software encoder. x264 is the status quo and
+    // fast enough; libx265 and especially libsvtav1 can run for hours, and the whole file is
+    // held in memory until the transcode finishes.
+    function buildSoftwareEncodingHint() {
+        if (!codecCapabilities || selectedVideoCodec === DEFAULT_VIDEO_CODEC) return null;
+        const capability = codecCapabilities.video[selectedVideoCodec];
+        if (!capability || capability.hardware) return null;
+
+        const hint = document.createElement('div');
+        hint.style.cssText = 'font-size:12px;color:#d0a24c;margin-top:2px;';
+        hint.textContent = t('SoftwareEncodingHint');
+        return hint;
+    }
+
+    function buildCodecSection(onCodecChange) {
+        const section = document.createElement('div');
+        section.style.cssText = 'padding:8px 20px 4px;';
+
+        const render = () => {
+            section.textContent = '';
+            const onSelect = (kind) => (id) => {
+                selectCodec(kind, id);
+                render();
+                onCodecChange();
+            };
+            section.appendChild(buildCodecRow(VIDEO_CODECS, 'video', t('ChooseVideoCodec'), onSelect('video')));
+            section.appendChild(buildCodecRow(AUDIO_CODECS, 'audio', t('ChooseAudioCodec'), onSelect('audio')));
+            const hint = buildSoftwareEncodingHint();
+            if (hint) section.appendChild(hint);
+        };
+
+        render();
+        return section;
+    }
 
     // --- Quality overlay ---
 
@@ -415,6 +718,9 @@
             currentItemId = liveItemId;
             fetchItemMetadata(liveItemId);
         }
+
+        // Runs alongside the metadata fetch; memoised for the rest of the page session.
+        const capabilitiesPromise = fetchCodecCapabilities();
 
         const scrim = document.createElement('div');
         scrim.id = 'qd-quality-sheet';
@@ -438,56 +744,86 @@
         document.body.appendChild(scrim);
 
         const item = currentItem || (currentItemPromise ? await currentItemPromise : null);
+        await capabilitiesPromise;
         if (!document.getElementById('qd-quality-sheet')) return;
 
         loadingEl.remove();
 
         const source = item && item.MediaSources && item.MediaSources[0];
+        // Filtered on the H.264-calibrated base bitrate so the set of rungs on offer stays
+        // stable when the codec changes — only their encoder targets move.
         const tiers = source && source.Bitrate
-            ? QUALITY_TIERS.filter(t => t.bitrate < source.Bitrate)
+            ? QUALITY_TIERS.filter(tier => tier.bitrate < source.Bitrate)
             : QUALITY_TIERS;
 
-        for (const tier of tiers) {
-            const btn = makeMenuItem('video_settings', tier.label, () => {
-                scrim.remove();
-                onTranscodeMenuClick(tier.bitrate);
-            });
-            sheet.appendChild(btn);
+        const tierList = document.createElement('div');
+
+        const renderTiers = () => {
+            tierList.textContent = '';
+            const factor = videoCodecFactor(selectedVideoCodec);
+
+            for (const tier of tiers) {
+                const bitrate = scaleBitrate(tier.bitrate, factor);
+                const btn = makeMenuItem('video_settings', `${tier.resolution} · ${formatBitrate(bitrate)}`, () => {
+                    scrim.remove();
+                    onTranscodeMenuClick(bitrate);
+                });
+                tierList.appendChild(btn);
+            }
+
+            if (tiers.length === 0) {
+                const empty = document.createElement('div');
+                empty.style.cssText = 'padding:16px 20px;color:#aaa;font-size:14px;';
+                empty.textContent = t('NoTranscodeOptions');
+                tierList.appendChild(empty);
+            }
+        };
+
+        // Only offered when the server told us what it can encode; otherwise the flow stays
+        // exactly as it was, on H.264/AAC.
+        if (codecCapabilitiesResolved) {
+            sheet.insertBefore(buildCodecSection(renderTiers), header);
         }
 
-        if (tiers.length === 0) {
-            const empty = document.createElement('div');
-            empty.style.cssText = 'padding:16px 20px;color:#aaa;font-size:14px;';
-            empty.textContent = t('NoTranscodeOptions');
-            sheet.appendChild(empty);
-        }
+        renderTiers();
+        sheet.appendChild(tierList);
     }
 
     // --- Download actions ---
 
     function onTranscodeMenuClick(bitrate) {
         if (!currentItem) return;
+        // Captured now: the sheet is gone, but the selection must not drift before the
+        // ApiClient callback runs.
+        const videoCodec = selectedVideoCodec;
+        const audioCodec = selectedAudioCodec;
         getApiClient(0, 5, (client) => {
             const token = client.accessToken();
             const baseUrl = client.serverAddress() || window.location.origin;
-            addToQueue(baseUrl, currentItemId, token, bitrate, currentItem);
+            addToQueue(baseUrl, currentItemId, token, bitrate, currentItem, videoCodec, audioCodec);
         });
     }
 
-    function addToQueue(baseUrl, itemId, token, selectedBitrate, item) {
+    function addToQueue(baseUrl, itemId, token, selectedBitrate, item, videoCodec, audioCodec) {
         const mediaSourceId = item.MediaSources && item.MediaSources[0] && item.MediaSources[0].Id
             ? item.MediaSources[0].Id
             : itemId;
-        const url = `${baseUrl}/Videos/${itemId}/stream.mp4?MediaSourceId=${mediaSourceId}&VideoBitrate=${selectedBitrate}&VideoCodec=h264&AudioCodec=aac&MaxAudioChannels=2&allowVideoStreamCopy=false&allowAudioStreamCopy=false&Static=false&api_key=${token}`;
+        // A single codec is sent deliberately: a comma-separated list lets the server silently
+        // downgrade while the UI still claims the codec the user picked.
+        const url = `${baseUrl}/Videos/${itemId}/stream.mp4?MediaSourceId=${mediaSourceId}&VideoBitrate=${selectedBitrate}&VideoCodec=${videoCodec}&AudioCodec=${audioCodec}&MaxAudioChannels=2&allowVideoStreamCopy=false&allowAudioStreamCopy=false&Static=false&api_key=${token}`;
+
+        const videoTag = codecTag(VIDEO_CODECS, videoCodec);
+        const audioTag = codecTag(AUDIO_CODECS, audioCodec);
+        const suffix = ` [${videoTag} ${formatBitrate(selectedBitrate).replace(' ', '')} ${audioTag}]`;
 
         const pad = (n) => String(n).padStart(2, '0');
         let filename;
         if (item.Type === 'Movie') {
-            filename = `${item.Name} (${item.ProductionYear}).mp4`;
+            filename = `${item.Name} (${item.ProductionYear})${suffix}.mp4`;
         } else if (item.Type === 'Episode') {
-            filename = `${item.SeriesName} S${pad(item.ParentIndexNumber)}E${pad(item.IndexNumber)} - ${item.Name}.mp4`;
+            filename = `${item.SeriesName} S${pad(item.ParentIndexNumber)}E${pad(item.IndexNumber)} - ${item.Name}${suffix}.mp4`;
         } else {
-            filename = 'download.mp4';
+            filename = `download${suffix}.mp4`;
         }
 
         const durationSeconds = item.RunTimeTicks / 10_000_000;
@@ -498,10 +834,20 @@
             filename,
             estimatedBytes,
             url,
+            videoCodec,
+            audioCodec,
+            codecLabel: `${videoTag} · ${formatBitrate(selectedBitrate)} · ${audioTag}`,
+            receivedBytes: 0,
             abortController: null,
             status: 'waiting',
         });
     }
+
+    const _menuObserver = new MutationObserver(() => {
+        const downloadBtn = document.querySelector('.actionSheetMenuItem[data-id="download"]');
+        if (downloadBtn) injectMenuItems(downloadBtn);
+    });
+    _menuObserver.observe(document.body, { childList: true, subtree: true });
 
     console.log('[TranscodeDownloader] plugin loaded');
     window.addEventListener('hashchange', onHashChange);

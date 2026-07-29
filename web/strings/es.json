@@ -4,5 +4,12 @@
     "NoTranscodeOptions": "No hay opciones de transcodificación disponibles.",
     "Waiting": "Esperando…",
     "DownloadTranscode": "Descargar (Transcodificar…)",
-    "DownloadFailed": "Error en la descarga."
+    "DownloadFailed": "Error en la descarga.",
+    "ChooseVideoCodec": "Códec de vídeo",
+    "ChooseAudioCodec": "Códec de audio",
+    "CodecUnsupported": "no compatible con el FFmpeg de este servidor",
+    "CodecDisabledByAdmin": "desactivado por el administrador del servidor",
+    "SoftwareEncodingHint": "Codificación por software — puede tardar mucho y el archivo se mantiene en memoria hasta que termina.",
+    "DownloadFailedCodec": "Error en la descarga — el servidor no pudo codificar con {codec}.",
+    "DownloadFailedStatus": "Error en la descarga (HTTP {status})."
 }

@@ -4,5 +4,12 @@
     "NoTranscodeOptions": "Keine Transcode-Optionen verfügbar.",
     "Waiting": "Warten…",
     "DownloadTranscode": "Herunterladen (Transkodieren…)",
-    "DownloadFailed": "Download fehlgeschlagen."
+    "DownloadFailed": "Download fehlgeschlagen.",
+    "ChooseVideoCodec": "Video-Codec",
+    "ChooseAudioCodec": "Audio-Codec",
+    "CodecUnsupported": "wird vom FFmpeg dieses Servers nicht unterstützt",
+    "CodecDisabledByAdmin": "vom Server-Administrator deaktiviert",
+    "SoftwareEncodingHint": "Software-Encoding — das kann sehr lange dauern und die Datei wird bis zum Abschluss im Arbeitsspeicher gehalten.",
+    "DownloadFailedCodec": "Download fehlgeschlagen — der Server konnte nicht mit {codec} kodieren.",
+    "DownloadFailedStatus": "Download fehlgeschlagen (HTTP {status})."
 }

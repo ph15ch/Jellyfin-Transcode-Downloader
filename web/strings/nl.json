@@ -4,5 +4,12 @@
     "NoTranscodeOptions": "Geen transcodeeropties beschikbaar.",
     "Waiting": "Wachten…",
     "DownloadTranscode": "Downloaden (Transcoderen…)",
-    "DownloadFailed": "Download mislukt."
+    "DownloadFailed": "Download mislukt.",
+    "ChooseVideoCodec": "Videocodec",
+    "ChooseAudioCodec": "Audiocodec",
+    "CodecUnsupported": "niet ondersteund door de FFmpeg van deze server",
+    "CodecDisabledByAdmin": "uitgeschakeld door de serverbeheerder",
+    "SoftwareEncodingHint": "Software-encoding — dit kan lang duren en het bestand blijft in het geheugen tot het klaar is.",
+    "DownloadFailedCodec": "Download mislukt — de server kon niet coderen met {codec}.",
+    "DownloadFailedStatus": "Download mislukt (HTTP {status})."
 }

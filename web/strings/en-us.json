@@ -4,5 +4,12 @@
     "NoTranscodeOptions": "No transcode options available.",
     "Waiting": "Waiting…",
     "DownloadTranscode": "Download (Transcode…)",
-    "DownloadFailed": "Download failed."
+    "DownloadFailed": "Download failed.",
+    "ChooseVideoCodec": "Video codec",
+    "ChooseAudioCodec": "Audio codec",
+    "CodecUnsupported": "not supported by this server's FFmpeg",
+    "CodecDisabledByAdmin": "disabled by the server administrator",
+    "SoftwareEncodingHint": "Software encoding — this can take a long time and the file is held in memory until it finishes.",
+    "DownloadFailedCodec": "Download failed — the server could not encode with {codec}.",
+    "DownloadFailedStatus": "Download failed (HTTP {status})."
 }
