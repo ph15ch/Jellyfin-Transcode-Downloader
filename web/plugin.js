@@ -535,17 +535,22 @@
         }
     }
 
-    // Fetched lazily on first quality-sheet open and memoised for the page session.
+    // Fetched lazily on first quality-sheet open. Only a *successful* probe is memoised for
+    // the page session: a failed one drops the cached promise so the next sheet retries,
+    // rather than hiding the picker until the tab is reloaded.
     function fetchCodecCapabilities() {
         if (codecCapabilitiesPromise) return codecCapabilitiesPromise;
 
-        codecCapabilitiesPromise = new Promise((resolve) => {
+        let probeFailed = false;
+
+        const probe = new Promise((resolve) => {
             const giveUp = (err) => {
                 console.warn('[TranscodeDownloader] Codec capabilities unavailable, falling back to H.264/AAC:', err);
                 codecCapabilities = null;
                 codecCapabilitiesResolved = false;
                 selectedVideoCodec = DEFAULT_VIDEO_CODEC;
                 selectedAudioCodec = DEFAULT_AUDIO_CODEC;
+                probeFailed = true;
                 resolve();
             };
 
@@ -570,7 +575,15 @@
             }, () => giveUp(new Error('ApiClient unavailable')));
         });
 
-        return codecCapabilitiesPromise;
+        codecCapabilitiesPromise = probe;
+
+        // Runs as a microtask, so it is ordered after the assignment above even when the
+        // probe fails synchronously inside the executor.
+        probe.then(() => {
+            if (probeFailed && codecCapabilitiesPromise === probe) codecCapabilitiesPromise = null;
+        });
+
+        return probe;
     }
 
     let currentItemId = null;
