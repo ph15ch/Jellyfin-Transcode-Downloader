@@ -200,7 +200,12 @@
                     if (!res.ok) throw new Error(`HTTP ${res.status}`);
                     const payload = await res.json();
                     const limit = readField(payload, 'MaxConcurrentDownloads');
-                    if (limit !== undefined) maxConcurrentDownloads = clampConcurrency(limit);
+                    if (limit !== undefined) {
+                        maxConcurrentDownloads = clampConcurrency(limit);
+                        // A raised limit has to reach downloads that are already waiting;
+                        // otherwise they stay sequential until the queue next changes.
+                        pumpQueue();
+                    }
                 } catch (err) {
                     console.warn('[TranscodeDownloader] Settings unavailable, keeping the download limit at', maxConcurrentDownloads, err);
                 }
@@ -216,6 +221,9 @@
     // transcode running on the server: for this plugin a download *is* its transcode.
     const downloadQueue = [];
     let activeDownloads = 0;
+    // Entry ids double as DOM ids and as the key the cancel button removes by, so they have to
+    // be unique even for two downloads of the same item started in the same millisecond.
+    let nextEntrySequence = 0;
 
     function enqueue(entry) {
         downloadQueue.push(entry);
@@ -960,7 +968,7 @@
         const estimatedBytes = (selectedBitrate * durationSeconds) / 8;
 
         enqueue({
-            id: `${itemId}-${Date.now()}`,
+            id: `${itemId}-${nextEntrySequence++}`,
             filename,
             estimatedBytes,
             url,

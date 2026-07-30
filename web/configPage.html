@@ -55,8 +55,9 @@
                     e.preventDefault();
                     Dashboard.showLoadingMsg();
                     ApiClient.getPluginConfiguration(TranscodeDownloaderConfig.pluginUniqueId).then(function (config) {
-                        // Sent as a number: the server clamps it to 1-5, but a string would
-                        // deserialize to the default and silently discard the change.
+                        // Sent as a number rather than the input's string value: the server
+                        // clamps it to 1-5, and an empty or unparsable field falls back to the
+                        // sequential default instead of being posted as "".
                         config.MaxConcurrentDownloads = parseInt(document.querySelector('#MaxConcurrentDownloads').value, 10) || 1;
                         ApiClient.updatePluginConfiguration(TranscodeDownloaderConfig.pluginUniqueId, config).then(function (result) {
                             Dashboard.processPluginConfigurationUpdateResult(result);
