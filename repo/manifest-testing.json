@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/ph15ch/Jellyfin-Transcode-Downloader/main/logo-beta.png",
     "versions": [
       {
+        "version": "1.0.25.1",
+        "changelog": "feat: choose video and audio codec for transcoded downloads\n\n- The quality sheet now offers a video and an audio codec picker, limited to\n  what the server actually has enabled\n- Downloads started from an episode list target the episode whose menu you\n  opened, instead of the season or series the page is showing\n- Failed or empty transcodes now report the real HTTP status instead of\n  silently producing a broken file",
+        "targetAbi": "10.11.8.0",
+        "sourceUrl": "https://github.com/ph15ch/Jellyfin-Transcode-Downloader/releases/download/test/v1.0.25.1/jellyfin-transcode-downloader_1.0.25.1-test.zip",
+        "checksum": "f99060178b1ebd6f32703772bb17e97f",
+        "timestamp": "2026-07-30T19:17:40Z"
+      },
+      {
         "version": "1.0.24.1",
         "changelog": "fix: transcoding was defaulting to a very low transcode instead of the choosen one",
         "targetAbi": "10.11.8.0",
