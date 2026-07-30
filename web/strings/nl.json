@@ -2,6 +2,7 @@
     "ChooseQuality": "Kwaliteit kiezen",
     "LoadingMediaInfo": "Media-informatie laden…",
     "NoTranscodeOptions": "Geen transcodeeropties beschikbaar.",
+    "ItemNotTranscodable": "Getranscodeerde downloads zijn alleen beschikbaar voor films en afleveringen.",
     "Waiting": "Wachten…",
     "DownloadTranscode": "Downloaden (Transcoderen…)",
     "DownloadFailed": "Download mislukt.",

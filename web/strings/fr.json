@@ -2,6 +2,7 @@
     "ChooseQuality": "Choisir la qualité",
     "LoadingMediaInfo": "Chargement des infos média…",
     "NoTranscodeOptions": "Aucune option de transcodage disponible.",
+    "ItemNotTranscodable": "Les téléchargements transcodés ne sont disponibles que pour les films et les épisodes.",
     "Waiting": "En attente…",
     "DownloadTranscode": "Télécharger (Transcodage…)",
     "DownloadFailed": "Téléchargement échoué.",

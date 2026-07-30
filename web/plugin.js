@@ -90,6 +90,7 @@
         ChooseQuality: 'Choose quality',
         LoadingMediaInfo: 'Loading media info…',
         NoTranscodeOptions: 'No transcode options available.',
+        ItemNotTranscodable: 'Transcoded downloads are only available for movies and episodes.',
         Waiting: 'Waiting…',
         DownloadTranscode: 'Download (Transcode…)',
         DownloadFailed: 'Download failed.',
@@ -408,6 +409,36 @@
         return params.get('id');
     }
 
+    // Item ids are 32 hex digits; menu entries carry a command name in the same attribute
+    // (`data-id="download"`), so every candidate has to be shape-checked before it is trusted.
+    function isItemId(value) {
+        return typeof value === 'string' && /^[0-9a-f]{32}$/i.test(value.replace(/-/g, ''));
+    }
+
+    // The item the *next* action sheet will act on, or null when the trigger carried no item.
+    let contextMenuItemId = null;
+
+    // An action sheet is not always about the item in the address bar: the episode rows of a
+    // season or series page each open one for their own episode, and Jellyfin resolves that
+    // item from the closest ancestor carrying data-id (shortcuts.js → getItem). Mirroring that
+    // lookup keeps our entry pointed at the same item Jellyfin's own Download entry uses;
+    // without it a season page downloads /Videos/{seasonId}/… and the server throws.
+    function recordContextMenuTarget(event) {
+        const target = event.target;
+        const holder = target && typeof target.closest === 'function' ? target.closest('[data-id]') : null;
+        const id = holder ? holder.getAttribute('data-id') : null;
+        contextMenuItemId = isItemId(id) ? id : null;
+    }
+
+    // Consumed on injection: a sheet opened by anything we did not see (so the id would be
+    // stale) falls back to the address bar, which is right for detail pages — their More button
+    // has no data-id ancestor at all.
+    function takeContextMenuItemId() {
+        const id = contextMenuItemId;
+        contextMenuItemId = null;
+        return id;
+    }
+
     function getApiClient(attempt, maxAttempts, callback, onFail) {
         if (window.ApiClient && window.ApiClient.accessToken && window.ApiClient.getCurrentUserId) {
             callback(window.ApiClient);
@@ -543,23 +574,36 @@
     }
 
     let currentItemId = null;
-    let currentItem = null;
     let currentItemPromise = null;
 
     function fetchItemMetadata(itemId) {
-        currentItemPromise = new Promise((resolve) => {
+        return new Promise((resolve) => {
             getApiClient(0, 10, async (client) => {
                 try {
                     const userId = client.getCurrentUserId();
-                    const item = await client.getItem(userId, itemId);
-                    if (itemId === currentItemId) currentItem = item;
-                    resolve(item);
+                    resolve(await client.getItem(userId, itemId));
                 } catch (err) {
                     console.error('[TranscodeDownloader] Metadata fetch failed:', err);
                     resolve(null);
                 }
-            });
+            }, () => resolve(null));
         });
+    }
+
+    // Prefetched for the item on screen; a sheet opened for any other item fetches its own.
+    function itemMetadata(itemId) {
+        if (itemId === currentItemId && currentItemPromise) return currentItemPromise;
+        return fetchItemMetadata(itemId);
+    }
+
+    // A season, a series or a song has no video stream to re-encode. Jellyfin's own Download
+    // entry sits next to ours in the same sheet for those items, so the sheet alone is no
+    // guarantee that /Videos/{id}/stream.mp4 means anything — a season id makes the server
+    // throw while it resolves media sources. An absent MediaType is treated as playable so a
+    // sparse DTO never blocks a download that used to work.
+    function isTranscodable(item) {
+        if (!item || item.IsFolder === true) return false;
+        return !item.MediaType || item.MediaType === 'Video';
     }
 
     function onHashChange() {
@@ -569,12 +613,8 @@
         const itemId = extractItemId(hash);
         if (!itemId) return;
 
-        if (currentItemId !== itemId) {
-            currentItem = null;
-            currentItemPromise = null;
-        }
         currentItemId = itemId;
-        fetchItemMetadata(itemId);
+        currentItemPromise = fetchItemMetadata(itemId);
     }
 
     // --- Action sheet menu injection ---
@@ -606,9 +646,14 @@
     function injectMenuItems(downloadBtn) {
         if (downloadBtn.parentNode.querySelector('[data-id^="qd-"]')) return;
 
+        // Bound now, while the sheet's trigger is still known — by the time the entry is
+        // clicked the click target is the entry itself.
+        const itemId = takeContextMenuItemId() || extractItemId(window.location.hash);
+        if (!itemId) return;
+
         const transcodeBtn = makeMenuItem('video_settings', t('DownloadTranscode'), () => {
             closeActiveSheet();
-            showQualitySheet();
+            showQualitySheet(itemId);
         });
 
         downloadBtn.insertAdjacentElement('afterend', transcodeBtn);
@@ -710,19 +755,13 @@
 
     // --- Quality overlay ---
 
-    async function showQualitySheet() {
+    async function showQualitySheet(itemId) {
         if (document.getElementById('qd-quality-sheet')) return;
 
         // Ensure strings are loaded before rendering UI
         if (stringsPromise) await stringsPromise;
 
-        const liveItemId = extractItemId(window.location.hash);
-        if (liveItemId && liveItemId !== currentItemId) {
-            currentItem = null;
-            currentItemPromise = null;
-            currentItemId = liveItemId;
-            fetchItemMetadata(liveItemId);
-        }
+        const metadataPromise = itemMetadata(itemId);
 
         // Runs alongside the metadata fetch; memoised for the rest of the page session.
         const capabilitiesPromise = fetchCodecCapabilities();
@@ -748,11 +787,22 @@
         scrim.appendChild(sheet);
         document.body.appendChild(scrim);
 
-        const item = currentItem || (currentItemPromise ? await currentItemPromise : null);
+        const item = await metadataPromise;
         await capabilitiesPromise;
         if (!document.getElementById('qd-quality-sheet')) return;
 
         loadingEl.remove();
+
+        // A sheet can be opened for an item with nothing to transcode (a season, a series);
+        // saying so beats firing a request the server can only fail. A metadata fetch that
+        // failed outright is reported as "no options" instead of a wrong claim about the type.
+        if (!isTranscodable(item)) {
+            const notice = document.createElement('div');
+            notice.style.cssText = 'padding:16px 20px;color:#aaa;font-size:14px;';
+            notice.textContent = item ? t('ItemNotTranscodable') : t('NoTranscodeOptions');
+            sheet.appendChild(notice);
+            return;
+        }
 
         const source = item && item.MediaSources && item.MediaSources[0];
         // Filtered on the H.264-calibrated base bitrate so the set of rungs on offer stays
@@ -771,7 +821,7 @@
                 const bitrate = scaleBitrate(tier.bitrate, factor);
                 const btn = makeMenuItem('video_settings', `${tier.resolution} · ${formatBitrate(bitrate)}`, () => {
                     scrim.remove();
-                    onTranscodeMenuClick(bitrate);
+                    onTranscodeMenuClick(bitrate, item.Id || itemId, item);
                 });
                 tierList.appendChild(btn);
             }
@@ -796,8 +846,8 @@
 
     // --- Download actions ---
 
-    function onTranscodeMenuClick(bitrate) {
-        if (!currentItem) return;
+    function onTranscodeMenuClick(bitrate, itemId, item) {
+        if (!item) return;
         // Captured now: the sheet is gone, but the selection must not drift before the
         // ApiClient callback runs.
         const videoCodec = selectedVideoCodec;
@@ -805,7 +855,7 @@
         getApiClient(0, 5, (client) => {
             const token = client.accessToken();
             const baseUrl = client.serverAddress() || window.location.origin;
-            addToQueue(baseUrl, currentItemId, token, bitrate, currentItem, videoCodec, audioCodec);
+            addToQueue(baseUrl, itemId, token, bitrate, item, videoCodec, audioCodec);
         });
     }
 
@@ -847,6 +897,10 @@
             status: 'waiting',
         });
     }
+
+    // Capture phase, so the trigger is recorded before Jellyfin's own handler opens the sheet.
+    document.addEventListener('click', recordContextMenuTarget, true);
+    document.addEventListener('contextmenu', recordContextMenuTarget, true);
 
     const _menuObserver = new MutationObserver(() => {
         const downloadBtn = document.querySelector('.actionSheetMenuItem[data-id="download"]');
