@@ -29,10 +29,14 @@
   </ItemGroup>
 
   <!-- The client script and string bundles are embedded and served by
-       TranscodeDownloaderController; nothing is written to disk. -->
+       TranscodeDownloaderController; the settings page is embedded and served by Jellyfin's
+       dashboard (Plugin.GetPages). Nothing is written to disk. -->
   <ItemGroup>
     <EmbeddedResource Include="..\web\plugin.js">
       <LogicalName>Jellyfin.Plugin.TranscodeDownloader.web.plugin.js</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\web\configPage.html">
+      <LogicalName>Jellyfin.Plugin.TranscodeDownloader.web.configPage.html</LogicalName>
     </EmbeddedResource>
     <EmbeddedResource Include="..\web\strings\en-us.json">
       <LogicalName>Jellyfin.Plugin.TranscodeDownloader.web.strings.en-us.json</LogicalName>

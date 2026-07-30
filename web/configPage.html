@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Transcode Downloader</title>
+</head>
+<body>
+    <div id="TranscodeDownloaderConfigPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button">
+        <div data-role="content">
+            <div class="content-primary">
+                <form id="TranscodeDownloaderConfigForm">
+                    <div class="inputContainer">
+                        <label class="inputLabel inputLabelUnfocused" for="MaxConcurrentDownloads">Simultaneous downloads</label>
+                        <input id="MaxConcurrentDownloads" name="MaxConcurrentDownloads" type="number" is="emby-input" min="1" max="5" step="1" required />
+                        <div class="fieldDescription">
+                            How many queued downloads run at the same time (1&ndash;5). Every download is a
+                            transcode running on this server, so this is equally the number of simultaneous
+                            transcodes the plugin will start.
+                        </div>
+                        <div class="fieldDescription">
+                            The default of <strong>1</strong> keeps the queue strictly sequential. Raise it only
+                            if this server has the CPU or GPU headroom for several transcodes at once: each
+                            download also holds its whole file in the browser's memory until it finishes, and
+                            browsers ask for permission the first time a site saves several files at once.
+                        </div>
+                        <div class="fieldDescription">
+                            This limit applies to the plugin's own download queue. Jellyfin's server-wide
+                            transcoding settings (Dashboard &rarr; Playback) still apply on top of it.
+                        </div>
+                    </div>
+                    <div>
+                        <button is="emby-button" type="submit" class="raised button-submit block emby-button">
+                            <span>Save</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <script type="text/javascript">
+            var TranscodeDownloaderConfig = {
+                pluginUniqueId: 'a4b5c6d7-e8f9-0a1b-2c3d-4e5f6a7b8c9d'
+            };
+
+            document.querySelector('#TranscodeDownloaderConfigPage')
+                .addEventListener('pageshow', function () {
+                    Dashboard.showLoadingMsg();
+                    ApiClient.getPluginConfiguration(TranscodeDownloaderConfig.pluginUniqueId).then(function (config) {
+                        document.querySelector('#MaxConcurrentDownloads').value = config.MaxConcurrentDownloads;
+                        Dashboard.hideLoadingMsg();
+                    });
+                });
+
+            document.querySelector('#TranscodeDownloaderConfigForm')
+                .addEventListener('submit', function (e) {
+                    e.preventDefault();
+                    Dashboard.showLoadingMsg();
+                    ApiClient.getPluginConfiguration(TranscodeDownloaderConfig.pluginUniqueId).then(function (config) {
+                        // Sent as a number: the server clamps it to 1-5, but a string would
+                        // deserialize to the default and silently discard the change.
+                        config.MaxConcurrentDownloads = parseInt(document.querySelector('#MaxConcurrentDownloads').value, 10) || 1;
+                        ApiClient.updatePluginConfiguration(TranscodeDownloaderConfig.pluginUniqueId, config).then(function (result) {
+                            Dashboard.processPluginConfigurationUpdateResult(result);
+                        });
+                    });
+                    return false;
+                });
+        </script>
+    </div>
+</body>
+</html>

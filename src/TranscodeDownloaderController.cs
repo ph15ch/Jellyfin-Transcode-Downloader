@@ -14,8 +14,8 @@ using Microsoft.Extensions.Logging;
 namespace Jellyfin.Plugin.TranscodeDownloader
 {
     /// <summary>
-    /// Serves the embedded Transcode Downloader client script, its string bundles, and the
-    /// server's codec capabilities.
+    /// Serves the embedded Transcode Downloader client script, its string bundles, the
+    /// server's codec capabilities, and the administrator settings the client honours.
     /// The script and strings are anonymous — the browser loads them via a plain script/fetch
     /// with no API token. The codec endpoint exposes server encoding configuration and requires
     /// a login, so <c>[AllowAnonymous]</c> is applied per action rather than to the class: a
@@ -101,6 +101,29 @@ namespace Jellyfin.Plugin.TranscodeDownloader
             if (stream is null) return NotFound();
 
             return File(stream, "application/json");
+        }
+
+        /// <summary>
+        /// GET /TranscodeDownloader/Config — the administrator settings the client script has to
+        /// honour, currently the download-queue concurrency limit. It is a separate endpoint
+        /// because Jellyfin's own <c>/Plugins/{id}/Configuration</c> requires elevation and every
+        /// user's queue needs this number; only the client-relevant fields are exposed.
+        /// </summary>
+        [HttpGet("Config")]
+        [Authorize]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [Produces("application/json")]
+        public ActionResult<ClientConfigurationDto> GetConfig()
+        {
+            // Instance is null only if the plugin has not finished loading; the sequential
+            // default is the safe answer in that window.
+            var configuration = Plugin.Instance?.Configuration;
+
+            return new ClientConfigurationDto
+            {
+                MaxConcurrentDownloads = configuration?.MaxConcurrentDownloads
+                    ?? PluginConfiguration.MinConcurrentDownloads,
+            };
         }
 
         /// <summary>
