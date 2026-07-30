@@ -17,7 +17,9 @@ original file.
 
 After installing the plugin, open any **movie or episode detail page** in the Jellyfin web
 client. Open the **"More" menu** (the `⋯` / kebab menu on the detail page) — a
-**"Download (Transcode…)"** entry appears at the bottom of the list.
+**"Download (Transcode…)"** entry appears at the bottom of the list. The entry also shows up
+in the `⋯` menu of any episode row or card, so an episode can be downloaded straight from a
+season or series page without opening it first.
 
 Selecting it opens a quality picker. Choose a video codec, an audio codec and a bitrate tier —
 Jellyfin transcodes on the fly and the plugin downloads the stream with a live progress bar.

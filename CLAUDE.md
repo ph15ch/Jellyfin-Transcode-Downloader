@@ -171,6 +171,7 @@ Single-context repo: one `CONTEXT.md` + `docs/adr/` at the repo root. See
 | Controller auth | `[AllowAnonymous]` sits on `ClientScript`/`strings` only — a `<script>` load carries no token; otherwise it 401s and the button silently never appears. It must **not** be at class level: that would override `[Authorize]` on `Codecs` |
 | Codec picked but FFmpeg lacks the encoder | Jellyfin accepts the request and the transcode dies mid-stream; the `Codecs` endpoint probes `SupportsEncoder` up front and the picker disables the codec |
 | Button injection selectors may change | `web/plugin.js` tries multiple selectors with a retry loop |
+| The action sheet is not always about the item in the address bar | Episode rows on a season/series page open a sheet for their own episode; resolve the target from the trigger's closest `[data-id]` ancestor as jellyfin-web does, and fall back to the hash — see `docs/adr/0003-resolve-download-target-from-action-sheet.md` |
 | VBR bitrate variance | Show `~` in UI; ±10–15% is acceptable |
 | Transcoded downloads buffer into RAM | All downloads use fetch+Blob; size is bounded by the selected bitrate tier |
 | CORS | Non-issue — same origin as the Jellyfin web client |
