@@ -231,14 +231,15 @@
         queueProcessing = false;
     }
 
-    // A transcode that never delivered a byte means the server accepted the request and the
-    // encoder then failed to start — the observable symptom of an encoder Jellyfin resolves
-    // to but FFmpeg does not actually have.
+    // An HTTP status means the server rejected the request outright, which disproves "the
+    // encoder failed to start" — so it always wins over the codec heuristic. Only a request the
+    // server accepted and then failed to deliver a single byte for points at an encoder that
+    // Jellyfin resolves to but FFmpeg does not actually have.
     function describeFailure(entry, err) {
+        if (err && err.status) return t('DownloadFailedStatus').replace('{status}', err.status);
         if (!entry.receivedBytes && entry.videoCodec && entry.videoCodec !== DEFAULT_VIDEO_CODEC) {
             return t('DownloadFailedCodec').replace('{codec}', codecLabel(VIDEO_CODECS, entry.videoCodec));
         }
-        if (err && err.status) return t('DownloadFailedStatus').replace('{status}', err.status);
         return t('DownloadFailed');
     }
 
@@ -257,6 +258,10 @@
             entry.receivedBytes = received;
             updateEntryProgress(entry, received / estimatedBytes, estimatedBytes, received);
         }
+
+        // A transcode that dies on startup can still return 200 and then close the stream
+        // immediately. Without this, the user gets a 0-byte .mp4 reported as a success.
+        if (received === 0) throw new Error('Transcode produced no data');
 
         return new Blob(chunks, { type: 'video/mp4' });
     }
