@@ -172,9 +172,40 @@
     }
 
     // --- Download queue ---
-    // Each entry: { id, filename, estimatedBytes, url, abortController, status: 'waiting'|'active' }
+    // Each entry: { id, filename, estimatedBytes, url, stopUrl, abortController, status: 'waiting'|'active' }
     const downloadQueue = [];
     let queueProcessing = false;
+
+    function randomId() {
+        const bytes = new Uint8Array(16);
+        (window.crypto || window.msCrypto).getRandomValues(bytes);
+        return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    // Jellyfin only deletes a progressive transcode's temp file when it kills the job, and it
+    // never kills a job whose ffmpeg already exited (TranscodeManager.PingTimer bails out on
+    // HasExited before arming the kill timer). A completed download always ends that way, so the
+    // file would sit in the transcode folder until the next server restart. Killing the job
+    // explicitly is the only cleanup path — see docs/adr/0004-stop-active-encoding-after-download.md.
+    function stopActiveEncoding(entry) {
+        if (!entry.stopUrl) return;
+        const stopUrl = entry.stopUrl;
+        entry.stopUrl = null; // never fire twice for the same job
+        try {
+            fetch(stopUrl, { method: 'DELETE', keepalive: true }).catch((err) => {
+                console.warn('[TranscodeDownloader] failed to stop server transcode:', err);
+            });
+        } catch (err) {
+            console.warn('[TranscodeDownloader] failed to stop server transcode:', err);
+        }
+    }
+
+    // A closed tab aborts the fetch, which is enough for a still-running ffmpeg (the server's kill
+    // timer takes over) but not for one that already finished — that job needs the same explicit
+    // stop as a completed download.
+    window.addEventListener('pagehide', () => {
+        downloadQueue.forEach(stopActiveEncoding);
+    });
 
     function enqueue(entry) {
         downloadQueue.push(entry);
@@ -223,6 +254,10 @@
                     await new Promise(r => setTimeout(r, 3000));
                 }
             }
+
+            // Whether the download finished, failed, or was aborted, the server-side job is done
+            // with — and it will not clean up its own temp file.
+            stopActiveEncoding(entry);
 
             // Remove this entry (whether done, failed, or aborted)
             const idx = downloadQueue.indexOf(entry);
@@ -876,9 +911,17 @@
         const mediaSourceId = item.MediaSources && item.MediaSources[0] && item.MediaSources[0].Id
             ? item.MediaSources[0].Id
             : itemId;
+        // Identifies the server-side transcoding job so it can be killed (and its temp file
+        // deleted) once the download ends. Both are per-download and synthetic: the pair also
+        // seeds the transcode's output filename, so a fresh id keeps a new download from picking
+        // up a stale file, and a device id of our own keeps this out of the real playback
+        // session's transcoding info in the dashboard.
+        const playSessionId = randomId();
+        const deviceId = `transcode-downloader-${playSessionId}`;
         // A single codec is sent deliberately: a comma-separated list lets the server silently
         // downgrade while the UI still claims the codec the user picked.
-        const url = `${baseUrl}/Videos/${itemId}/stream.mp4?MediaSourceId=${mediaSourceId}&VideoBitrate=${selectedBitrate}&VideoCodec=${videoCodec}&AudioCodec=${audioCodec}&MaxAudioChannels=2&allowVideoStreamCopy=false&allowAudioStreamCopy=false&Static=false&api_key=${token}`;
+        const url = `${baseUrl}/Videos/${itemId}/stream.mp4?MediaSourceId=${mediaSourceId}&VideoBitrate=${selectedBitrate}&VideoCodec=${videoCodec}&AudioCodec=${audioCodec}&MaxAudioChannels=2&allowVideoStreamCopy=false&allowAudioStreamCopy=false&Static=false&PlaySessionId=${playSessionId}&DeviceId=${encodeURIComponent(deviceId)}&api_key=${token}`;
+        const stopUrl = `${baseUrl}/Videos/ActiveEncodings?deviceId=${encodeURIComponent(deviceId)}&playSessionId=${playSessionId}&api_key=${token}`;
 
         const videoTag = codecTag(VIDEO_CODECS, videoCodec);
         const audioTag = codecTag(AUDIO_CODECS, audioCodec);
@@ -902,6 +945,7 @@
             filename,
             estimatedBytes,
             url,
+            stopUrl,
             videoCodec,
             audioCodec,
             codecLabel: `${videoTag} · ${formatBitrate(selectedBitrate)} · ${audioTag}`,

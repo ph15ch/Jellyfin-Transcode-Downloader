@@ -76,7 +76,7 @@ The `?v=` query is the plugin assembly version, set at release time via
 ### Client logic (`web/plugin.js` — only its delivery is owned by C#; do not change its logic)
 
 - **Download URL — transcoded**:
-  `/Videos/{itemId}/stream.mp4?MediaSourceId={mediaSourceId}&VideoBitrate={bitrate}&VideoCodec={videoCodec}&AudioCodec={audioCodec}&MaxAudioChannels=2&Static=false&api_key={token}`
+  `/Videos/{itemId}/stream.mp4?MediaSourceId={mediaSourceId}&VideoBitrate={bitrate}&VideoCodec={videoCodec}&AudioCodec={audioCodec}&MaxAudioChannels=2&Static=false&PlaySessionId={id}&DeviceId={id}&api_key={token}`
   Must be `VideoBitrate`, not `MaxStreamingBitrate` — the latter is a client-capability hint read during
   the `PlaybackInfo` negotiation, not the encoder target. Sent alone (or paired with `MaxHeight`), it
   collapses the transcode to Jellyfin's minimum tier (416×234) regardless of the value, reproducible via
@@ -95,6 +95,11 @@ The `?v=` query is the plugin assembly version, set at release time via
   `estimatedBytes = (bitrate * durationSeconds) / 8`. ±10–15% (VBR) — show `~` prefix.
 - **Download flow:** `fetch()` + `response.body.getReader()` → progress bar → `Blob` →
   `URL.createObjectURL()` → `<a download>` → `revokeObjectURL()`; `AbortController` for cancel.
+- **Transcode cleanup:** every download carries a synthetic per-download `PlaySessionId`/`DeviceId`
+  pair, and the client fires `DELETE /Videos/ActiveEncodings?deviceId=&playSessionId=` when the
+  download ends (done, failed, aborted, or `pagehide`). Jellyfin never deletes the temp file of a
+  transcode whose ffmpeg exited on its own, which is every completed download — see
+  `docs/adr/0004-stop-active-encoding-after-download.md`.
 - **Original file download** is Jellyfin's own built-in Download button — not part of this plugin.
 - **UI injection:** a `MutationObserver` on `document.body` watches for Jellyfin's own action
   sheet (`.actionSheetMenuItem[data-id="download"]`) and inserts the entry after it. Prints
@@ -175,5 +180,6 @@ Single-context repo: one `CONTEXT.md` + `docs/adr/` at the repo root. See
 | Button injection selectors may change | `web/plugin.js` tries multiple selectors with a retry loop |
 | The action sheet is not always about the item in the address bar | Episode rows on a season/series page open a sheet for their own episode; resolve the target from the trigger's closest `[data-id]` ancestor as jellyfin-web does, and fall back to the hash — see `docs/adr/0003-resolve-download-target-from-action-sheet.md` |
 | VBR bitrate variance | Show `~` in UI; ±10–15% is acceptable |
+| Server keeps the transcode temp file after a finished download | `PingTimer` skips the kill timer once ffmpeg has exited, so the client must `DELETE /Videos/ActiveEncodings` itself (ADR 0004) |
 | Transcoded downloads buffer into RAM | All downloads use fetch+Blob; size is bounded by the selected bitrate tier |
 | CORS | Non-issue — same origin as the Jellyfin web client |
