@@ -27,8 +27,9 @@ To grab the original file without transcoding, use Jellyfin's own **Download** b
 already in the More menu.
 
 You can queue multiple items: navigate to another movie or episode and add more downloads
-while one is already in progress. Each queued item waits its turn and starts automatically
-when the one ahead of it finishes.
+while one is already in progress. By default each queued item waits its turn and starts
+automatically when the one ahead of it finishes; an administrator can allow
+[several at a time](#simultaneous-downloads).
 
 ### Choosing a codec
 
@@ -77,13 +78,43 @@ prefix because VBR encoding means the real size can vary by ±10–15%.
 ### Download queue
 
 A panel in the bottom-right corner shows all queued downloads, each labelled with its codecs
-and bitrate. The active item displays a progress bar; items waiting to start show "Waiting…".
-Each item has its own **✕** cancel button — cancelling removes only that item and the next one
-starts automatically. The panel disappears when the queue is empty.
+and bitrate. Running items display a progress bar; items waiting to start show "Waiting…".
+Each item has its own **✕** cancel button — cancelling removes only that item, leaves any
+other running download alone, and lets the next one start. The panel disappears when the
+queue is empty.
 
 The queue is in-memory only: closing or reloading the browser tab clears it.
 
 Cancelling mid-download aborts the in-progress request cleanly; no partial file is saved.
+
+### Simultaneous downloads
+
+Out of the box the queue runs **one download at a time**. A server with CPU or GPU headroom
+can do better, so the number is configurable in **Dashboard → Plugins → Transcode Downloader**:
+
+| Setting | Default | Range |
+|---|---|---|
+| Simultaneous downloads | 1 | 1–5 |
+
+Every download *is* a transcode running on the server, so this is equally the number of
+simultaneous transcodes the plugin will start. It is a server-wide setting because the
+encoding load lands on the server, not on the browser that asked for it — users don't get an
+individual knob.
+
+Raise it only if the server can take it, and keep two things in mind:
+
+- **Each running download is held in the browser's memory** until it finishes. Three
+  concurrent 4 GB downloads means about 12 GB of browser memory.
+- **Browsers ask before saving several files at once.** The first time two downloads finish
+  close together, the browser shows a "download multiple files?" prompt; allow it once and it
+  stops asking for that site.
+
+The ceiling of five exists because browsers only allow six connections per origin on
+HTTP/1.1 — more downloads than that would sit in the browser's own queue and starve the web
+client's API calls instead of finishing any sooner.
+
+The setting applies to this plugin's queue. Jellyfin's own transcoding settings
+(**Dashboard → Playback**) still apply on top of it.
 
 ## How it works
 
@@ -98,6 +129,11 @@ A second endpoint, `GET /TranscodeDownloader/Codecs`, reports which video and au
 this server's FFmpeg actually has and which the administrator permits. Unlike the script and
 translation endpoints it requires a logged-in session, because it exposes server encoding
 configuration. If it is unreachable the picker quietly falls back to H.264/AAC only.
+
+A third, `GET /TranscodeDownloader/Config`, hands the client the administrator settings it has
+to honour — currently the simultaneous-download limit. It exists because Jellyfin's own
+`/Plugins/{id}/Configuration` is admin-only, and every user's queue needs that number. If it is
+unreachable the queue stays sequential.
 
 ## Requirements
 

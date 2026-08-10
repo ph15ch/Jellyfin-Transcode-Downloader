@@ -171,65 +171,130 @@
         });
     }
 
+    // --- Server settings ---
+
+    // How many downloads may run at the same time. Server-configured (Dashboard → Plugins →
+    // Transcode Downloader) and read back over /TranscodeDownloader/Config; until that
+    // succeeds the queue behaves exactly as it always did — one download at a time.
+    const DEFAULT_MAX_CONCURRENT_DOWNLOADS = 1;
+    // Mirrors PluginConfiguration.MaxAllowedConcurrentDownloads. The server already clamps,
+    // so this only guards against a response from a newer server than this script.
+    const MAX_CONCURRENT_DOWNLOADS_CEILING = 5;
+
+    let maxConcurrentDownloads = DEFAULT_MAX_CONCURRENT_DOWNLOADS;
+
+    function clampConcurrency(value) {
+        const limit = Math.floor(Number(value));
+        if (!Number.isFinite(limit)) return DEFAULT_MAX_CONCURRENT_DOWNLOADS;
+        return Math.min(Math.max(limit, 1), MAX_CONCURRENT_DOWNLOADS_CEILING);
+    }
+
+    // Read whenever the quality sheet opens, so raising the limit takes effect without every
+    // user reloading the web client. A failure leaves the last known value in place.
+    function fetchServerSettings() {
+        return new Promise((resolve) => {
+            getApiClient(0, 10, async (client) => {
+                try {
+                    const baseUrl = client.serverAddress() || window.location.origin;
+                    const res = await fetch(`${baseUrl}/TranscodeDownloader/Config?api_key=${encodeURIComponent(client.accessToken())}`);
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    const payload = await res.json();
+                    const limit = readField(payload, 'MaxConcurrentDownloads');
+                    if (limit !== undefined) {
+                        maxConcurrentDownloads = clampConcurrency(limit);
+                        // A raised limit has to reach downloads that are already waiting;
+                        // otherwise they stay sequential until the queue next changes.
+                        pumpQueue();
+                    }
+                } catch (err) {
+                    console.warn('[TranscodeDownloader] Settings unavailable, keeping the download limit at', maxConcurrentDownloads, err);
+                }
+                resolve();
+            }, () => resolve());
+        });
+    }
+
     // --- Download queue ---
-    // Each entry: { id, filename, estimatedBytes, url, abortController, status: 'waiting'|'active' }
+    // Each entry: { id, filename, estimatedBytes, url, abortController,
+    //               status: 'waiting'|'active'|'finished' }
+    // Up to maxConcurrentDownloads entries are active at once. Each active entry is also one
+    // transcode running on the server: for this plugin a download *is* its transcode.
     const downloadQueue = [];
-    let queueProcessing = false;
+    let activeDownloads = 0;
+    // Entry ids double as DOM ids and as the key the cancel button removes by, so they have to
+    // be unique even for two downloads of the same item started in the same millisecond.
+    let nextEntrySequence = 0;
 
     function enqueue(entry) {
         downloadQueue.push(entry);
         renderQueue();
-        if (!queueProcessing) processQueue();
+        pumpQueue();
     }
 
     function removeFromQueue(id) {
-        const idx = downloadQueue.findIndex(e => e.id === id);
-        if (idx === -1) return;
-        const entry = downloadQueue[idx];
-        if (entry.status === 'active' && entry.abortController) {
-            entry.abortController.abort();
-        }
-        downloadQueue.splice(idx, 1);
-        renderQueue();
-        // If we cancelled the active item, processQueue will be called by the fetch .finally
+        const entry = downloadQueue.find(e => e.id === id);
+        if (!entry) return;
+        // Aborting an active download frees its slot in runEntry's finally; a waiting one has
+        // no request to abort and simply leaves the queue.
+        if (entry.abortController) entry.abortController.abort();
+        dropEntry(entry);
     }
 
-    async function processQueue() {
-        if (queueProcessing) return;
-        if (downloadQueue.length === 0) return;
+    function dropEntry(entry) {
+        const idx = downloadQueue.indexOf(entry);
+        if (idx === -1) return;
+        downloadQueue.splice(idx, 1);
+        renderQueue();
+    }
 
-        queueProcessing = true;
-        while (downloadQueue.length > 0) {
-            const entry = downloadQueue[0];
-            entry.status = 'active';
-            entry.abortController = new AbortController();
-            renderQueue();
+    // Leaves a finished row on screen long enough to be read, then drops it. The slot it
+    // occupied is already free by then, so a lingering row never delays the next download.
+    function retireEntry(entry, lingerMs) {
+        entry.status = 'finished';
+        setTimeout(() => dropEntry(entry), lingerMs);
+    }
 
-            try {
-                const response = await fetch(entry.url, { signal: entry.abortController.signal });
-                if (!response.ok) {
-                    const httpError = new Error(`HTTP ${response.status}`);
-                    httpError.status = response.status;
-                    throw httpError;
-                }
-                const blob = await readStream(response.body, entry.estimatedBytes, entry);
-                triggerBlobDownload(blob, entry.filename);
-                updateEntryProgress(entry, 1, entry.estimatedBytes);
-                await new Promise(r => setTimeout(r, 1000));
-            } catch (err) {
-                if (err.name !== 'AbortError') {
-                    console.error('[TranscodeDownloader] Download failed:', err);
-                    updateEntryStatus(entry, describeFailure(entry, err));
-                    await new Promise(r => setTimeout(r, 3000));
-                }
-            }
+    // Starts waiting entries until the concurrency limit is reached; called whenever the queue
+    // or the number of running downloads changes. runEntry marks its entry active before its
+    // first await, so the same entry can never be picked up twice.
+    function pumpQueue() {
+        while (activeDownloads < maxConcurrentDownloads) {
+            const next = downloadQueue.find(e => e.status === 'waiting');
+            if (!next) return;
 
-            // Remove this entry (whether done, failed, or aborted)
-            const idx = downloadQueue.indexOf(entry);
-            if (idx !== -1) downloadQueue.splice(idx, 1);
-            renderQueue();
+            activeDownloads++;
+            runEntry(next).finally(() => {
+                activeDownloads--;
+                pumpQueue();
+            });
         }
-        queueProcessing = false;
+    }
+
+    async function runEntry(entry) {
+        entry.status = 'active';
+        entry.abortController = new AbortController();
+        renderQueue();
+
+        try {
+            const response = await fetch(entry.url, { signal: entry.abortController.signal });
+            if (!response.ok) {
+                const httpError = new Error(`HTTP ${response.status}`);
+                httpError.status = response.status;
+                throw httpError;
+            }
+            const blob = await readStream(response.body, entry.estimatedBytes, entry);
+            triggerBlobDownload(blob, entry.filename);
+            updateEntryProgress(entry, 1, entry.estimatedBytes);
+            retireEntry(entry, 1000);
+        } catch (err) {
+            // A cancelled download was already dropped by removeFromQueue; there is nothing
+            // left to report and no row to keep on screen.
+            if (err.name === 'AbortError') return;
+
+            console.error('[TranscodeDownloader] Download failed:', err);
+            updateEntryStatus(entry, describeFailure(entry, err));
+            retireEntry(entry, 3000);
+        }
     }
 
     // An HTTP status means the server rejected the request outright, which disproves "the
@@ -356,15 +421,16 @@
                 else list.appendChild(row);
             }
 
-            // Update active/waiting appearance without touching the fill width
+            // Update the row's appearance for its current status without touching the fill
+            // width. A finished row keeps the text it ended on — its result or its error.
             const track = row.querySelector('.qd-track');
             const statusEl = row.querySelector(`#qd-status-${entry.id}`);
-            if (entry.status === 'active') {
-                if (track) track.style.display = 'block';
-                if (statusEl) statusEl.style.color = '#aaa';
-            } else {
+            if (entry.status === 'waiting') {
                 if (track) track.style.display = 'none';
                 if (statusEl) { statusEl.style.color = '#666'; statusEl.textContent = t('Waiting'); }
+            } else {
+                if (track) track.style.display = 'block';
+                if (statusEl) statusEl.style.color = '#aaa';
             }
         });
     }
@@ -778,6 +844,9 @@
 
         // Runs alongside the metadata fetch; memoised for the rest of the page session.
         const capabilitiesPromise = fetchCodecCapabilities();
+        // Re-read on every open, so an administrator raising the download limit reaches users
+        // without a client reload.
+        const settingsPromise = fetchServerSettings();
 
         const scrim = document.createElement('div');
         scrim.id = 'qd-quality-sheet';
@@ -802,6 +871,7 @@
 
         const item = await metadataPromise;
         await capabilitiesPromise;
+        await settingsPromise;
         if (!document.getElementById('qd-quality-sheet')) return;
 
         loadingEl.remove();
@@ -898,7 +968,7 @@
         const estimatedBytes = (selectedBitrate * durationSeconds) / 8;
 
         enqueue({
-            id: `${itemId}-${Date.now()}`,
+            id: `${itemId}-${nextEntrySequence++}`,
             filename,
             estimatedBytes,
             url,
