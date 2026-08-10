@@ -85,6 +85,25 @@ The queue is in-memory only: closing or reloading the browser tab clears it.
 
 Cancelling mid-download aborts the in-progress request cleanly; no partial file is saved.
 
+### In the Jellyfin Android app
+
+The Android app runs the Jellyfin web client inside a WebView that **cannot save downloads
+started by the page** — it registers no download handler at all, so a download simply
+disappears with no file and no error. (The app's own Download button sidesteps this: it hands
+the item to the app's native downloader, which only knows how to fetch original files.)
+
+The plugin detects the app and hands the download to your **system browser** instead, which
+saves it normally. The quality and codec picker works exactly as it does elsewhere; what
+changes after you pick a tier:
+
+- there is **no progress bar, queue or cancel button** — the transfer belongs to the browser,
+  so track it in the browser's own downloads list;
+- the file is saved as **`stream.mp4`** rather than `Movie (2020) [AV1 4Mbps AAC].mp4`, because
+  Jellyfin's stream endpoint doesn't tell the browser what to call it. Rename it afterwards.
+
+The picker says all of this before you choose, so no transcode is started by surprise.
+Downloading through a normal browser on the same phone has none of these limitations.
+
 ## How it works
 
 The plugin embeds a small client script and serves it from a plugin API endpoint

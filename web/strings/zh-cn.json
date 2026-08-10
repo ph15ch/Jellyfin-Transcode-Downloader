@@ -12,5 +12,8 @@
     "CodecDisabledByAdmin": "已被服务器管理员禁用",
     "SoftwareEncodingHint": "软件编码 — 可能耗时很长，且文件会一直保存在内存中直到完成。",
     "DownloadFailedCodec": "下载失败 — 服务器无法使用 {codec} 编码。",
-    "DownloadFailedStatus": "下载失败（HTTP {status}）。"
+    "DownloadFailedStatus": "下载失败（HTTP {status}）。",
+    "BrowserHandoffHint": "Jellyfin 安卓客户端无法自行保存下载，因此将在浏览器中打开。文件会保存为 stream.mp4 — 请在下载后重命名。",
+    "BrowserHandoffStarted": "已交给浏览器 — 请在浏览器的下载列表中查看。",
+    "BrowserHandoffFailed": "无法打开浏览器。"
 }

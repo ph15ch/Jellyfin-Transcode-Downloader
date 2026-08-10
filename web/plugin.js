@@ -101,6 +101,9 @@
         SoftwareEncodingHint: 'Software encoding — this can take a long time and the file is held in memory until it finishes.',
         DownloadFailedCodec: 'Download failed — the server could not encode with {codec}.',
         DownloadFailedStatus: 'Download failed (HTTP {status}).',
+        BrowserHandoffHint: 'The Jellyfin Android app cannot save downloads itself, so this opens in your browser. The file is saved as stream.mp4 — rename it afterwards.',
+        BrowserHandoffStarted: 'Handed to your browser — check its downloads.',
+        BrowserHandoffFailed: 'Could not open your browser.',
     };
 
     // Populated by initStrings(); null until loaded.
@@ -206,6 +209,75 @@
     window.addEventListener('pagehide', () => {
         downloadQueue.forEach(stopActiveEncoding);
     });
+
+    function buildStopUrl(baseUrl, deviceId, playSessionId, token) {
+        return `${baseUrl}/Videos/ActiveEncodings?deviceId=${encodeURIComponent(deviceId)}`
+            + `&playSessionId=${playSessionId}&api_key=${token}`;
+    }
+
+    // --- Deferred transcode cleanup (browser handoff only) ---
+
+    // A download handed to the system browser (see handOffToBrowser) leaves this page with no
+    // completion signal, so the ADR-0004 stop cannot be fired when it ends. The job is recorded
+    // instead and stopped on a later page load, once it is old enough that ffmpeg has certainly
+    // exited — at which point DELETE /Videos/ActiveEncodings only deletes the leftover temp file.
+    // The age threshold is what keeps the stop from killing a transcode the browser is still
+    // streaming; leaving the file a few hours longer is the cheaper mistake.
+    const STORAGE_PENDING_STOPS = 'transcodeDownloader.pendingStops';
+    const PENDING_STOP_MIN_AGE_MS = 6 * 60 * 60 * 1000;
+    const PENDING_STOP_MAX = 50;
+
+    function readPendingStops() {
+        try {
+            const raw = window.localStorage.getItem(STORAGE_PENDING_STOPS);
+            const parsed = raw ? JSON.parse(raw) : [];
+            return Array.isArray(parsed) ? parsed.filter(e => e && e.baseUrl && e.deviceId && e.playSessionId) : [];
+        } catch (_) {
+            return [];
+        }
+    }
+
+    function writePendingStops(entries) {
+        try {
+            window.localStorage.setItem(STORAGE_PENDING_STOPS, JSON.stringify(entries));
+        } catch (_) {
+            // localStorage unavailable — the temp file then survives until the server restarts,
+            // which is the pre-existing behaviour rather than a new failure.
+        }
+    }
+
+    // The token is deliberately not stored: it can expire or be revoked between the handoff and
+    // the flush, so the stop is rebuilt with whatever token the session holds at that point.
+    function rememberPendingStop(baseUrl, deviceId, playSessionId) {
+        const entries = readPendingStops();
+        entries.push({ baseUrl, deviceId, playSessionId, at: Date.now() });
+        writePendingStops(entries.slice(-PENDING_STOP_MAX));
+    }
+
+    function flushPendingStops() {
+        const entries = readPendingStops();
+        const now = Date.now();
+        const due = entries.filter(entry => now - (entry.at || 0) >= PENDING_STOP_MIN_AGE_MS);
+        if (due.length === 0) return;
+
+        getApiClient(0, 10, (client) => {
+            const token = client.accessToken();
+            const baseUrl = client.serverAddress() || window.location.origin;
+            due.forEach((entry) => {
+                const url = buildStopUrl(entry.baseUrl || baseUrl, entry.deviceId, entry.playSessionId, token);
+                fetch(url, { method: 'DELETE' }).catch((err) => {
+                    console.warn('[TranscodeDownloader] deferred transcode stop failed:', err);
+                });
+            });
+            // Re-read rather than reusing `entries`, so a handoff recorded while the ApiClient
+            // was still resolving is not dropped. Due entries go whether or not the requests
+            // succeed: a stop that fails now will not start succeeding later, and retrying
+            // forever would grow the list without bound.
+            writePendingStops(readPendingStops().filter(entry => now - (entry.at || 0) < PENDING_STOP_MIN_AGE_MS));
+        }, () => {
+            // No ApiClient — leave the entries in place and retry on the next page load.
+        });
+    }
 
     function enqueue(entry) {
         downloadQueue.push(entry);
@@ -422,6 +494,58 @@
     function updateEntryStatus(entry, text) {
         const statusEl = document.getElementById(`qd-status-${entry.id}`);
         if (statusEl) statusEl.textContent = text;
+    }
+
+    // --- Jellyfin Android app (WebView) handoff ---
+
+    // The Jellyfin Android app hosts jellyfin-web in a WebView that registers no
+    // DownloadListener — org.jellyfin.mobile has none anywhere, because its own Download button
+    // goes through the NativeInterface.downloadFiles bridge, which takes item ids and resolves
+    // the URL natively. A WebView with no DownloadListener silently discards every download the
+    // page starts, so the blob <a download> click below vanishes: the transcode streams to 100%,
+    // no file is written and nothing is logged. NativeShell.openUrl fires an ACTION_VIEW intent
+    // and the system browser downloads the URL instead, which is the only path that works inside
+    // the app. See issue #33.
+    function isAndroidAppWebView() {
+        const shell = window.NativeShell;
+        if (!shell || typeof shell.openUrl !== 'function') return false;
+        // The desktop shell defines NativeShell too and saves blobs perfectly well; NativeInterface
+        // is the Android app's own JS bridge, so it is what distinguishes the two.
+        if (!window.NativeInterface || typeof window.NativeInterface.openUrl !== 'function') return false;
+        return /Android/i.test(navigator.userAgent || '');
+    }
+
+    // Handing the URL over ends this page's involvement: the browser owns the transfer, so there
+    // is no progress, no cancel and no filename of ours — the file lands under the request path
+    // as stream.mp4 because Jellyfin's stream endpoint sends no Content-Disposition.
+    function handOffToBrowser(url, baseUrl, deviceId, playSessionId) {
+        try {
+            window.NativeShell.openUrl(url);
+        } catch (err) {
+            console.error('[TranscodeDownloader] browser handoff failed:', err);
+            showTransientNotice(t('BrowserHandoffFailed'));
+            return;
+        }
+        rememberPendingStop(baseUrl, deviceId, playSessionId);
+        showTransientNotice(t('BrowserHandoffStarted'));
+    }
+
+    // The queue panel only renders queued entries, and a handoff never becomes one — this is the
+    // only feedback the user gets that anything happened at all.
+    function showTransientNotice(text) {
+        const existing = document.getElementById('qd-notice');
+        if (existing) existing.remove();
+
+        const notice = document.createElement('div');
+        notice.id = 'qd-notice';
+        notice.textContent = text;
+        // left+right with margin-left:auto keeps it hugging the right edge on a desktop viewport
+        // without letting it overflow the left edge of a phone narrower than max-width.
+        notice.style.cssText = 'position:fixed;bottom:16px;left:16px;right:16px;max-width:400px;margin-left:auto;'
+            + 'background:#1a1a1a;border:1px solid #444;border-radius:6px;color:#fff;font-size:13px;'
+            + 'font-family:monospace;padding:12px 16px;z-index:9999;';
+        document.body.appendChild(notice);
+        setTimeout(() => notice.remove(), 8000);
     }
 
     function triggerBlobDownload(blob, filename) {
@@ -888,6 +1012,15 @@
             sheet.insertBefore(buildCodecSection(renderTiers), header);
         }
 
+        // Said before the choice, not after: picking a tier in the app leaves for the browser
+        // immediately, and a transcode that surprises the user has already cost server time.
+        if (isAndroidAppWebView()) {
+            const handoffHint = document.createElement('div');
+            handoffHint.style.cssText = 'padding:0 20px 8px;font-size:12px;color:#d0a24c;';
+            handoffHint.textContent = t('BrowserHandoffHint');
+            sheet.appendChild(handoffHint);
+        }
+
         renderTiers();
         sheet.appendChild(tierList);
     }
@@ -921,7 +1054,14 @@
         // A single codec is sent deliberately: a comma-separated list lets the server silently
         // downgrade while the UI still claims the codec the user picked.
         const url = `${baseUrl}/Videos/${itemId}/stream.mp4?MediaSourceId=${mediaSourceId}&VideoBitrate=${selectedBitrate}&VideoCodec=${videoCodec}&AudioCodec=${audioCodec}&MaxAudioChannels=2&allowVideoStreamCopy=false&allowAudioStreamCopy=false&Static=false&PlaySessionId=${playSessionId}&DeviceId=${encodeURIComponent(deviceId)}&api_key=${token}`;
-        const stopUrl = `${baseUrl}/Videos/ActiveEncodings?deviceId=${encodeURIComponent(deviceId)}&playSessionId=${playSessionId}&api_key=${token}`;
+        // Nothing below this point applies inside the Android app: there is no queue entry, no
+        // progress and no filename of ours once the browser owns the transfer.
+        if (isAndroidAppWebView()) {
+            handOffToBrowser(url, baseUrl, deviceId, playSessionId);
+            return;
+        }
+
+        const stopUrl = buildStopUrl(baseUrl, deviceId, playSessionId, token);
 
         const videoTag = codecTag(VIDEO_CODECS, videoCodec);
         const audioTag = codecTag(AUDIO_CODECS, audioCodec);
@@ -974,6 +1114,7 @@
 
     injectQueuePanel();
     initStrings();
+    flushPendingStops();
 
     // Re-fetch strings whenever Jellyfin changes the UI language (updates document.documentElement.lang).
     new MutationObserver(() => {
