@@ -12,5 +12,8 @@
     "CodecDisabledByAdmin": "vom Server-Administrator deaktiviert",
     "SoftwareEncodingHint": "Software-Encoding — das kann sehr lange dauern und die Datei wird bis zum Abschluss im Arbeitsspeicher gehalten.",
     "DownloadFailedCodec": "Download fehlgeschlagen — der Server konnte nicht mit {codec} kodieren.",
-    "DownloadFailedStatus": "Download fehlgeschlagen (HTTP {status})."
+    "DownloadFailedStatus": "Download fehlgeschlagen (HTTP {status}).",
+    "BrowserHandoffHint": "Die Jellyfin-Android-App kann Downloads nicht selbst speichern, daher wird dies im Browser geöffnet. Die Datei wird als stream.mp4 gespeichert — bitte danach umbenennen.",
+    "BrowserHandoffStarted": "An den Browser übergeben — dort in den Downloads nachsehen.",
+    "BrowserHandoffFailed": "Der Browser konnte nicht geöffnet werden."
 }

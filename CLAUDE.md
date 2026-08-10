@@ -100,6 +100,12 @@ The `?v=` query is the plugin assembly version, set at release time via
   download ends (done, failed, aborted, or `pagehide`). Jellyfin never deletes the temp file of a
   transcode whose ffmpeg exited on its own, which is every completed download — see
   `docs/adr/0004-stop-active-encoding-after-download.md`.
+- **Jellyfin Android app:** its WebView registers no `DownloadListener`, so the blob `<a download>`
+  click is silently discarded and no file is ever written. Detected via
+  `NativeShell.openUrl` + `NativeInterface.openUrl` + an Android UA, and the stream URL is handed to
+  `NativeShell.openUrl()` (→ `ACTION_VIEW` → system browser) instead. No progress/queue/cancel and
+  the browser names the file `stream.mp4`; the ADR-0004 stop is deferred to a later page load via
+  `localStorage` (6h age gate) — see `docs/adr/0005-hand-android-app-downloads-to-the-browser.md`.
 - **Original file download** is Jellyfin's own built-in Download button — not part of this plugin.
 - **UI injection:** a `MutationObserver` on `document.body` watches for Jellyfin's own action
   sheet (`.actionSheetMenuItem[data-id="download"]`) and inserts the entry after it. Prints
@@ -182,4 +188,5 @@ Single-context repo: one `CONTEXT.md` + `docs/adr/` at the repo root. See
 | VBR bitrate variance | Show `~` in UI; ±10–15% is acceptable |
 | Server keeps the transcode temp file after a finished download | `PingTimer` skips the kill timer once ffmpeg has exited, so the client must `DELETE /Videos/ActiveEncodings` itself (ADR 0004) |
 | Transcoded downloads buffer into RAM | All downloads use fetch+Blob; size is bounded by the selected bitrate tier |
+| Blob downloads vanish in the Jellyfin Android app's WebView | No `DownloadListener` is registered there; detect the app and hand the URL to `NativeShell.openUrl()` (ADR 0005) |
 | CORS | Non-issue — same origin as the Jellyfin web client |
